@@ -1,7 +1,7 @@
 
-
 import React, { useState } from 'react';
 import { User, UserRole, SchoolData } from '../types';
+import { StorageService } from '../services/storage';
 import { 
   LayoutDashboard, 
   Users, 
@@ -32,6 +32,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, onNavigate, onLogout, academicYear, children }) => {
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['nilai-rapor']);
+  const isOnline = StorageService.isOnline();
 
   const toggleMenu = (menuId: string) => {
     setExpandedMenus(prev => 
@@ -197,6 +198,12 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950">
+           {/* Connection Status Indicator */}
+           <div className={`mb-3 px-3 py-1.5 rounded text-[10px] font-bold border flex items-center justify-center gap-2 bg-emerald-900/30 border-emerald-800 text-emerald-400`}>
+               <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+               {isOnline ? 'SERVER: ONLINE (CLOUD)' : 'MODE: LOKAL (ONLINE)'}
+           </div>
+
            <button 
              onClick={onLogout}
              className="flex items-center justify-center space-x-2 text-slate-400 hover:text-white hover:bg-red-600/20 w-full px-4 py-2 rounded transition-colors group"

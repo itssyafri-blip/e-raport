@@ -1,43 +1,43 @@
-/// <reference types="vite/client" />
 import { User, Student, LearningObjective, Grade, UserRole, SUBJECTS, SchoolData, ReportGrade, ReportExtras, ReportCoverConfig, StudentProfile } from '../types';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
 
 // --- KONFIGURASI FIREBASE ---
 // Menggunakan Environment Variables Vercel agar aman
+// Menggunakan casting 'any' untuk menghindari error TypeScript pada import.meta
+const getEnv = (key: string) => (import.meta as any).env?.[key];
+
 const firebaseConfig = {
-  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "API_KEY_ANDA_DISINI",
-  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "PROJECT_ID.firebaseapp.com",
-  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "PROJECT_ID",
-  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "PROJECT_ID.appspot.com",
-  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "SENDER_ID",
-  appId: import.meta.env?.VITE_FIREBASE_APP_ID || "APP_ID"
+  apiKey: getEnv("VITE_FIREBASE_API_KEY") || "API_KEY_ANDA_DISINI",
+  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN") || "PROJECT_ID.firebaseapp.com",
+  projectId: getEnv("VITE_FIREBASE_PROJECT_ID") || "PROJECT_ID",
+  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET") || "PROJECT_ID.appspot.com",
+  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID") || "SENDER_ID",
+  appId: getEnv("VITE_FIREBASE_APP_ID") || "APP_ID"
 };
 
 let db: any = null;
 let isOnline = false;
 
 // FAIL-SAFE INITIALIZATION
-// Mencegah aplikasi crash jika config belum diisi di Vercel
 try {
-    // Cek sederhana apakah config valid (bukan placeholder default)
     const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI";
     
     if (isConfigured) {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         isOnline = true;
-        console.log("System Status: ONLINE (Connected to Firestore)");
+        console.log("System Status: ONLINE (Cloud Mode Active)");
     } else {
-        console.warn("System Status: OFFLINE (Running in Local Mode - Missing Config)");
+        console.warn("System Status: LOKAL (Offline Mode - Config Missing)");
     }
 } catch (e) {
-    console.error("Firebase Init Failed (Switched to Offline Mode):", e);
+    console.error("Firebase Init Failed:", e);
     isOnline = false;
     db = null;
 }
 
-// Initial Mock Data
+// Initial Mock Data (Fallback)
 const INITIAL_USERS: User[] = [
   { id: '1', username: 'admin', password: '123', name: 'Administrator', role: UserRole.ADMIN },
 ];
@@ -46,7 +46,6 @@ const INITIAL_STUDENTS: Student[] = [];
 
 const INITIAL_TPS: LearningObjective[] = [
   { id: 'tp1', subject: 'Matematika (Umum)', description: 'Memahami konsep eksponen dan logaritma', semester: 1, phase: 'E', classTarget: 'X-A' },
-  { id: 'tp2', subject: 'Matematika (Umum)', description: 'Menyelesaikan masalah sistem persamaan linear tiga variabel', semester: 1, phase: 'E', classTarget: 'X-A' },
 ];
 
 const INITIAL_SCHOOL_DATA: SchoolData = {
@@ -95,16 +94,20 @@ export interface SessionData {
 }
 
 // --- CLOUD HELPER FUNCTIONS ---
+// FORCE SYNC: Mengambil data dari cloud dan MENIMPA local storage
+// Ini memastikan "Satu Data" tercapai.
 const syncCollectionFromCloud = async (collectionName: string, storageKey: string, initialData: any) => {
     if (!db || !isOnline) return;
     try {
         const snapshot = await getDocs(collection(db, collectionName));
         if (!snapshot.empty) {
             const data = snapshot.docs.map(doc => doc.data());
+            // OVERWRITE LOCAL DATA WITH CLOUD DATA
             localStorage.setItem(storageKey, JSON.stringify(data));
+            console.log(`Synced ${collectionName}: ${data.length} records.`);
         }
     } catch (e) {
-        console.error(`Sync Fail (${collectionName}): Switched to local data.`);
+        console.error(`Sync Fail (${collectionName}): Keeping local data.`);
     }
 };
 
@@ -113,7 +116,6 @@ const saveToCloud = async (collectionName: string, docId: string, data: any) => 
     try {
         await setDoc(doc(db, collectionName, docId), data);
     } catch (e) {
-        // Silent fail is acceptable in offline/unstable network
         console.warn(`Cloud Save Fail (${collectionName}): Saved locally only.`);
     }
 };
@@ -129,13 +131,14 @@ const deleteFromCloud = async (collectionName: string, docId: string) => {
 
 export const StorageService = {
   syncFromCloud: async () => {
-      // Always resolve true to prevent App white screen
       if (!isOnline) {
-          console.log("Skipping cloud sync (Offline Mode)");
+          console.log("Mode Lokal: Menggunakan data browser.");
           return Promise.resolve();
       }
       
+      console.log("Mode Online: Menyinkronkan data dari server...");
       try {
+          // Sync semua koleksi penting
           await Promise.all([
               syncCollectionFromCloud('users', KEYS.USERS, INITIAL_USERS),
               syncCollectionFromCloud('students', KEYS.STUDENTS, INITIAL_STUDENTS),
@@ -155,7 +158,7 @@ export const StorageService = {
               })()
           ]);
       } catch (e) {
-          console.error("Critical Sync Error - Proceeding with local data", e);
+          console.error("Sync Error - Continuing with local data", e);
       }
   },
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { StorageService } from './services/storage';
 import { User, UserRole, SchoolData } from './types';
@@ -12,7 +13,7 @@ import { ReportPrint } from './components/ReportPrint';
 import { SchoolDataSettings } from './components/SchoolData';
 import { ReportSettings } from './components/ReportSettings';
 import { ReportBank } from './components/ReportBank';
-import { Loader2, Cloud, CloudOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -152,13 +153,6 @@ const App: React.FC = () => {
       onLogout={handleLogout}
       academicYear={academicYear}
     >
-      <div className="mb-4 flex items-center justify-end text-[10px] text-gray-400 gap-1 no-print">
-          {StorageService.isOnline() ? (
-              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100"><Cloud className="w-3 h-3" /> Server Online</span>
-          ) : (
-              <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-2 py-1 rounded-full border border-orange-100"><CloudOff className="w-3 h-3" /> Mode Lokal (Offline)</span>
-          )}
-      </div>
       {renderContent()}
     </Layout>
   );

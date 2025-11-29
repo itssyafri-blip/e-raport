@@ -1,33 +1,40 @@
+/// <reference types="vite/client" />
 import { User, Student, LearningObjective, Grade, UserRole, SUBJECTS, SchoolData, ReportGrade, ReportExtras, ReportCoverConfig, StudentProfile } from '../types';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
 
 // --- KONFIGURASI FIREBASE ---
-// GANTI BAGIAN INI DENGAN CONFIG DARI PROJECT FIREBASE ANDA UNTUK MENGAKTIFKAN SERVER ONLINE
+// Menggunakan Environment Variables Vercel agar aman
 const firebaseConfig = {
-  apiKey: "API_KEY_ANDA_DISINI",
-  authDomain: "PROJECT_ID_ANDA.firebaseapp.com",
-  projectId: "PROJECT_ID_ANDA",
-  storageBucket: "PROJECT_ID_ANDA.appspot.com",
-  messagingSenderId: "SENDER_ID",
-  appId: "APP_ID"
+  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "API_KEY_ANDA_DISINI",
+  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "PROJECT_ID.firebaseapp.com",
+  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "PROJECT_ID",
+  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "PROJECT_ID.appspot.com",
+  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "SENDER_ID",
+  appId: import.meta.env?.VITE_FIREBASE_APP_ID || "APP_ID"
 };
 
 let db: any = null;
 let isOnline = false;
 
+// FAIL-SAFE INITIALIZATION
+// Mencegah aplikasi crash jika config belum diisi di Vercel
 try {
-    // Cek apakah config masih default/kosong
-    if (firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI") {
+    // Cek sederhana apakah config valid (bukan placeholder default)
+    const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI";
+    
+    if (isConfigured) {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         isOnline = true;
         console.log("System Status: ONLINE (Connected to Firestore)");
     } else {
-        console.warn("System Status: OFFLINE (Firebase Config belum diisi. Menggunakan LocalStorage).");
+        console.warn("System Status: OFFLINE (Running in Local Mode - Missing Config)");
     }
 } catch (e) {
-    console.error("Firebase Init Error:", e);
+    console.error("Firebase Init Failed (Switched to Offline Mode):", e);
+    isOnline = false;
+    db = null;
 }
 
 // Initial Mock Data
@@ -42,7 +49,6 @@ const INITIAL_TPS: LearningObjective[] = [
   { id: 'tp2', subject: 'Matematika (Umum)', description: 'Menyelesaikan masalah sistem persamaan linear tiga variabel', semester: 1, phase: 'E', classTarget: 'X-A' },
 ];
 
-// DATA SEKOLAH DEFAULT PERMANEN
 const INITIAL_SCHOOL_DATA: SchoolData = {
   name: 'SMA NEGERI 1 PULAU BANYAK BARAT',
   npsn: '',
@@ -68,7 +74,6 @@ const INITIAL_COVER_CONFIG: ReportCoverConfig = {
     footerText: ''
 };
 
-// LocalStorage Keys (Berfungsi sebagai Cache Lokal)
 const KEYS = {
   USERS: 'erapor_users',
   STUDENTS: 'erapor_students',
@@ -91,73 +96,71 @@ export interface SessionData {
 
 // --- CLOUD HELPER FUNCTIONS ---
 const syncCollectionFromCloud = async (collectionName: string, storageKey: string, initialData: any) => {
-    if (!db) return;
+    if (!db || !isOnline) return;
     try {
         const snapshot = await getDocs(collection(db, collectionName));
         if (!snapshot.empty) {
             const data = snapshot.docs.map(doc => doc.data());
             localStorage.setItem(storageKey, JSON.stringify(data));
-        } else {
-            // Jika cloud kosong tapi local storage kosong, mungkin init pertama kali
-            // Jangan overwrite local jika cloud kosong kecuali kita yakin cloud adalah 'master'
         }
     } catch (e) {
-        console.error(`Gagal sync ${collectionName}:`, e);
+        console.error(`Sync Fail (${collectionName}): Switched to local data.`);
     }
 };
 
 const saveToCloud = async (collectionName: string, docId: string, data: any) => {
-    if (!db) return;
+    if (!db || !isOnline) return;
     try {
         await setDoc(doc(db, collectionName, docId), data);
     } catch (e) {
-        console.error(`Gagal simpan ke cloud ${collectionName}:`, e);
+        // Silent fail is acceptable in offline/unstable network
+        console.warn(`Cloud Save Fail (${collectionName}): Saved locally only.`);
     }
 };
 
 const deleteFromCloud = async (collectionName: string, docId: string) => {
-    if (!db) return;
+    if (!db || !isOnline) return;
     try {
         await deleteDoc(doc(db, collectionName, docId));
     } catch (e) {
-        console.error(`Gagal hapus dari cloud ${collectionName}:`, e);
+        console.warn(`Cloud Delete Fail (${collectionName}).`);
     }
 };
 
 export const StorageService = {
-  // === SYNCHRONIZATION ===
-  // Fungsi ini dipanggil saat App dimulai untuk menarik data server
   syncFromCloud: async () => {
-      if (!isOnline) return;
-      console.log("Memulai sinkronisasi data dari server...");
+      // Always resolve true to prevent App white screen
+      if (!isOnline) {
+          console.log("Skipping cloud sync (Offline Mode)");
+          return Promise.resolve();
+      }
       
-      await Promise.all([
-          syncCollectionFromCloud('users', KEYS.USERS, INITIAL_USERS),
-          syncCollectionFromCloud('students', KEYS.STUDENTS, INITIAL_STUDENTS),
-          syncCollectionFromCloud('tps', KEYS.TPS, INITIAL_TPS),
-          syncCollectionFromCloud('report_grades', KEYS.REPORT_GRADES, []),
-          syncCollectionFromCloud('report_extras', KEYS.REPORT_EXTRAS, []),
-          syncCollectionFromCloud('student_profiles', KEYS.STUDENT_PROFILES, []),
-          
-          // Single document collections simulated as collection with 'main' doc or similar
-          // For simplicity in this NoSQL structure, we treat single configs as docs in a 'settings' collection
-          (async () => {
-              if(!db) return;
-              try {
-                  const settingsSnap = await getDocs(collection(db, 'settings'));
-                  settingsSnap.forEach(doc => {
-                      if(doc.id === 'school_data') localStorage.setItem(KEYS.SCHOOL, JSON.stringify(doc.data()));
-                      if(doc.id === 'cover_config') localStorage.setItem(KEYS.COVER_CONFIG, JSON.stringify(doc.data()));
-                  });
-              } catch(e) {}
-          })()
-      ]);
-      console.log("Sinkronisasi selesai.");
+      try {
+          await Promise.all([
+              syncCollectionFromCloud('users', KEYS.USERS, INITIAL_USERS),
+              syncCollectionFromCloud('students', KEYS.STUDENTS, INITIAL_STUDENTS),
+              syncCollectionFromCloud('tps', KEYS.TPS, INITIAL_TPS),
+              syncCollectionFromCloud('report_grades', KEYS.REPORT_GRADES, []),
+              syncCollectionFromCloud('report_extras', KEYS.REPORT_EXTRAS, []),
+              syncCollectionFromCloud('student_profiles', KEYS.STUDENT_PROFILES, []),
+              (async () => {
+                  if(!db) return;
+                  try {
+                      const settingsSnap = await getDocs(collection(db, 'settings'));
+                      settingsSnap.forEach(doc => {
+                          if(doc.id === 'school_data') localStorage.setItem(KEYS.SCHOOL, JSON.stringify(doc.data()));
+                          if(doc.id === 'cover_config') localStorage.setItem(KEYS.COVER_CONFIG, JSON.stringify(doc.data()));
+                      });
+                  } catch(e) {}
+              })()
+          ]);
+      } catch (e) {
+          console.error("Critical Sync Error - Proceeding with local data", e);
+      }
   },
 
   isOnline: () => isOnline,
 
-  // Auth
   login: async (username: string, password: string, academicYear: string): Promise<User | null> => {
     await delay(500);
     const users = StorageService.getUsers();
@@ -179,7 +182,6 @@ export const StorageService = {
     return session ? JSON.parse(session) : null;
   },
 
-  // Users
   getUsers: (): User[] => {
     const data = localStorage.getItem(KEYS.USERS);
     if (!data) {
@@ -195,7 +197,7 @@ export const StorageService = {
     if (index !== -1) {
       users[index] = updatedUser;
       localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-      saveToCloud('users', updatedUser.id, updatedUser); // Sync Cloud
+      saveToCloud('users', updatedUser.id, updatedUser);
     }
   },
 
@@ -204,14 +206,14 @@ export const StorageService = {
     if (!newUser.id) newUser.id = Date.now().toString();
     users.push(newUser);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    saveToCloud('users', newUser.id, newUser); // Sync Cloud
+    saveToCloud('users', newUser.id, newUser);
   },
 
   deleteUser: (userId: string) => {
     let users = StorageService.getUsers();
     users = users.filter(u => u.id !== userId);
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    deleteFromCloud('users', userId); // Sync Cloud
+    deleteFromCloud('users', userId);
   },
 
   getHomeroomTeacher: (className: string): User | undefined => {
@@ -219,7 +221,6 @@ export const StorageService = {
     return users.find(u => u.homeroomClass === className);
   },
 
-  // Students
   getStudents: (): Student[] => {
     const data = localStorage.getItem(KEYS.STUDENTS);
     if (!data) {
@@ -240,17 +241,16 @@ export const StorageService = {
         students.push(student);
     }
     localStorage.setItem(KEYS.STUDENTS, JSON.stringify(students));
-    saveToCloud('students', student.id, student); // Sync Cloud
+    saveToCloud('students', student.id, student);
   },
 
   deleteStudent: (studentId: string) => {
     let students = StorageService.getStudents();
     students = students.filter(s => s.id !== studentId);
     localStorage.setItem(KEYS.STUDENTS, JSON.stringify(students));
-    deleteFromCloud('students', studentId); // Sync Cloud
+    deleteFromCloud('students', studentId);
   },
 
-  // Student Profiles
   getStudentProfile: (studentId: string): StudentProfile => {
       const data = localStorage.getItem(KEYS.STUDENT_PROFILES);
       const profiles: StudentProfile[] = data ? JSON.parse(data) : [];
@@ -258,23 +258,10 @@ export const StorageService = {
       
       return found || {
           studentId,
-          nis: '',
-          nisn: '',
-          birthPlace: '',
-          birthDate: '',
-          gender: 'Laki-laki',
-          religion: 'Islam',
-          familyStatus: 'Anak Kandung',
-          childOrder: '',
-          address: '',
-          phone: '',
-          originSchool: '',
-          acceptedClass: 'X',
-          acceptedDate: '',
-          fatherName: '',
-          motherName: '',
-          guardianJob: '',
-          photoUrl: ''
+          nis: '', nisn: '', birthPlace: '', birthDate: '', gender: 'Laki-laki',
+          religion: 'Islam', familyStatus: 'Anak Kandung', childOrder: '', address: '',
+          phone: '', originSchool: '', acceptedClass: 'X', acceptedDate: '',
+          fatherName: '', motherName: '', guardianJob: '', photoUrl: ''
       };
   },
 
@@ -282,18 +269,12 @@ export const StorageService = {
       const data = localStorage.getItem(KEYS.STUDENT_PROFILES);
       let profiles: StudentProfile[] = data ? JSON.parse(data) : [];
       const index = profiles.findIndex(p => p.studentId === profile.studentId);
-      
-      if (index !== -1) {
-          profiles[index] = profile;
-      } else {
-          profiles.push(profile);
-      }
+      if (index !== -1) profiles[index] = profile;
+      else profiles.push(profile);
       localStorage.setItem(KEYS.STUDENT_PROFILES, JSON.stringify(profiles));
-      // Use composite key or just studentId as doc ID since 1:1
       saveToCloud('student_profiles', profile.studentId, profile);
   },
 
-  // Learning Objectives (TP)
   getTPs: (subject?: string, phase?: string, classTarget?: string): LearningObjective[] => {
     const data = localStorage.getItem(KEYS.TPS);
     let tps: LearningObjective[] = data ? JSON.parse(data) : INITIAL_TPS;
@@ -301,7 +282,6 @@ export const StorageService = {
     
     if (subject) tps = tps.filter(tp => tp.subject === subject);
     if (phase) tps = tps.filter(tp => tp.phase === phase);
-    
     return tps;
   },
 
@@ -323,13 +303,11 @@ export const StorageService = {
   getGrades: (subject: string): Grade[] => { return []; },
   saveGrades: (newGrades: Grade[]) => {},
 
-  // Report Grades
   getReportGrades: (subject: string, semester: string, academicYear?: string): ReportGrade[] => {
     const data = localStorage.getItem(KEYS.REPORT_GRADES);
     const grades: ReportGrade[] = data ? JSON.parse(data) : [];
     
     return grades.filter(g => {
-        // FIX: If subject is empty string (requesting all), don't filter by subject
         const matchesSubject = !subject || g.subject === subject;
         const matchesSemester = g.semester === semester;
         let matchesYear = true;
@@ -357,18 +335,16 @@ export const StorageService = {
       );
       
       if (idx !== -1) {
-        allGrades[idx] = { ...entryToSave, id: allGrades[idx].id }; // keep existing ID
+        allGrades[idx] = { ...entryToSave, id: allGrades[idx].id };
         saveToCloud('report_grades', allGrades[idx].id, allGrades[idx]);
       } else {
         allGrades.push(entryToSave);
         saveToCloud('report_grades', entryToSave.id, entryToSave);
       }
     });
-    
     localStorage.setItem(KEYS.REPORT_GRADES, JSON.stringify(allGrades));
   },
 
-  // Report Extras
   getReportExtras: (studentId: string, academicYear?: string): ReportExtras => {
     const data = localStorage.getItem(KEYS.REPORT_EXTRAS);
     const allExtras: ReportExtras[] = data ? JSON.parse(data) : [];
@@ -396,33 +372,25 @@ export const StorageService = {
   saveReportExtras: (extras: ReportExtras) => {
     const data = localStorage.getItem(KEYS.REPORT_EXTRAS);
     let allExtras: ReportExtras[] = data ? JSON.parse(data) : [];
-    
     const idx = allExtras.findIndex(e => 
         e.studentId === extras.studentId && 
         (e.academicYear === extras.academicYear || (!e.academicYear && !extras.academicYear))
     );
-    
     let docId = extras.studentId + '_' + (extras.academicYear || 'default').replace(/\//g, '-');
-
-    if (idx !== -1) {
-      allExtras[idx] = extras;
-    } else {
-      allExtras.push(extras);
-    }
+    if (idx !== -1) allExtras[idx] = extras;
+    else allExtras.push(extras);
+    
     localStorage.setItem(KEYS.REPORT_EXTRAS, JSON.stringify(allExtras));
     saveToCloud('report_extras', docId, extras);
   },
 
-  // School Data
   getSchoolData: (): SchoolData => {
     const data = localStorage.getItem(KEYS.SCHOOL);
     if (!data) {
       localStorage.setItem(KEYS.SCHOOL, JSON.stringify(INITIAL_SCHOOL_DATA));
       return INITIAL_SCHOOL_DATA;
     }
-    const parsedData = JSON.parse(data);
-    if (!parsedData.name) parsedData.name = INITIAL_SCHOOL_DATA.name;
-    return parsedData;
+    return JSON.parse(data);
   },
 
   saveSchoolData: (data: SchoolData) => {
@@ -430,7 +398,6 @@ export const StorageService = {
     saveToCloud('settings', 'school_data', data);
   },
 
-  // Report Cover Config
   getCoverConfig: (): ReportCoverConfig => {
       const data = localStorage.getItem(KEYS.COVER_CONFIG);
       if (!data) {

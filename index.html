@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>e-Rapor Kurikulum Merdeka</title>
+    <!-- Tailwind via CDN is fine for simple usage, though PostCSS is better in package.json. Keeping CDN for simplicity request. -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <style>
@@ -12,7 +13,6 @@
         font-family: 'Inter', sans-serif;
         background-color: #f3f4f6;
       }
-      /* Custom Scrollbar for sidebar */
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
       }
@@ -27,39 +27,31 @@
         background: rgba(255,255,255,0.2);
       }
       @media print {
-        .no-print {
-          display: none !important;
-        }
-        .print-only {
-          display: block !important;
-        }
-        body {
-          background-color: white;
-        }
-        /* Reset margins for print */
-        .no-print-padding {
-            margin-left: 0 !important;
-            padding: 0 !important;
-        }
+        .no-print { display: none !important; }
+        .print-only { display: block !important; }
+        body { background-color: white; }
+        .no-print-padding { margin-left: 0 !important; padding: 0 !important; }
       }
     </style>
-  <script type="importmap">
+    <!-- Import Map REMOVED because Vercel builds using package.json dependencies -->
+<script type="importmap">
 {
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
   }
 }
 </script>
 </head>
   <body class="h-full">
     <div id="root" class="h-full"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

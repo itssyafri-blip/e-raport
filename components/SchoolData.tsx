@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { SchoolData } from '../types';
-import { Save, Building2, Upload, Image as ImageIcon } from 'lucide-react';
+import { Save, Building2, Upload, Image as ImageIcon, CloudUpload } from 'lucide-react';
 
 interface SchoolDataSettingsProps {
     onUpdate: () => void;
@@ -35,7 +35,7 @@ export const SchoolDataSettings: React.FC<SchoolDataSettingsProps> = ({ onUpdate
   const handleSave = () => {
     StorageService.saveSchoolData(formData);
     onUpdate(); // Trigger update in parent layout (Sidebar)
-    setMessage('Data sekolah berhasil disimpan dan disinkronkan.');
+    setMessage('Data Sekolah berhasil disimpan ke Cloud Server & tersinkronisasi.');
     setTimeout(() => setMessage(''), 3000);
   };
 
@@ -62,13 +62,13 @@ export const SchoolDataSettings: React.FC<SchoolDataSettingsProps> = ({ onUpdate
             <Building2 className="w-6 h-6 text-blue-600" />
             Identitas Sekolah
             </h3>
-            <p className="text-sm text-gray-500 mt-1">Pengaturan profil sekolah, logo, dan data kepala sekolah (Realtime Sync).</p>
+            <p className="text-sm text-gray-500 mt-1">Pengaturan profil sekolah. Data ini akan disinkronkan ke seluruh pengguna via Cloud.</p>
         </div>
         <button 
             onClick={handleSave} 
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded shadow-sm text-sm font-semibold flex items-center gap-2 transition-colors"
         >
-            <Save className="w-4 h-4" /> Simpan Perubahan
+            <CloudUpload className="w-4 h-4" /> Simpan & Sinkron ke Cloud
         </button>
       </div>
 

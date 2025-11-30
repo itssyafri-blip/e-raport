@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { User, UserRole, SchoolData } from '../types';
 import { StorageService } from '../services/storage';
@@ -19,7 +18,13 @@ import {
   Settings,
   Files,
   Archive,
-  CheckSquare // New icon for Data Lengkap
+  CheckSquare,
+  CloudOff,
+  Cloud,
+  CloudUpload,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -34,12 +39,36 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, onNavigate, onLogout, academicYear, children }) => {
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['nilai-rapor']);
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success'>('idle');
   const isOnline = StorageService.isOnline();
 
   const toggleMenu = (menuId: string) => {
     setExpandedMenus(prev => 
       prev.includes(menuId) ? prev.filter(id => id !== menuId) : [...prev, menuId]
     );
+  };
+
+  const handleManualSync = async () => {
+      if(syncState !== 'idle') return;
+      
+      if(!isOnline) {
+          alert("Koneksi Offline. Tidak dapat mengirim data ke server. Harap konfigurasikan API Key di Vercel.");
+          return;
+      }
+
+      setSyncState('syncing');
+      try {
+          await StorageService.forcePushToCloud();
+          setSyncState('success');
+          // Revert back to idle after 3 seconds
+          setTimeout(() => {
+             setSyncState('idle');
+          }, 3000);
+      } catch (e) {
+          alert("Gagal mengirim data. Pastikan koneksi internet stabil.");
+          console.error(e);
+          setSyncState('idle');
+      }
   };
   
   const NavItem = ({ view, icon: Icon, label, indent = false }: { view: string, icon: any, label: string, indent?: boolean }) => {
@@ -97,9 +126,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
       <div className="mt-4 px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
         Laporan
       </div>
-      {/* New Menu Item */}
       <NavItem view="student-extras" icon={CheckSquare} label="Data Lengkap Siswa" />
-      
       <NavItem view="report-settings" icon={Settings} label="Atur Data Rapor" />
       <NavItem view="printing" icon={Printer} label="Cetak Rapor (PDF)" />
       <NavItem view="printing-v2" icon={Files} label="Cetak Rapor Jalur Dua" />
@@ -149,9 +176,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
              <div className="mt-4 px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Laporan (Wali Kelas)
              </div>
-             {/* New Menu Item */}
              <NavItem view="student-extras" icon={CheckSquare} label="Data Lengkap Siswa" />
-             
              <NavItem view="report-settings" icon={Settings} label="Atur Data Rapor" />
              <NavItem view="printing" icon={Printer} label="Cetak Rapor (PDF)" />
              <NavItem view="printing-v2" icon={Files} label="Cetak Rapor Jalur Dua" />
@@ -204,13 +229,60 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
           {user.role === UserRole.ADMIN ? renderAdminMenu() : renderGuruMenu()}
         </div>
 
-        {/* Sidebar Footer */}
+        {/* Sidebar Footer - STATUS CONNECTION */}
         <div className="p-4 border-t border-slate-800 bg-slate-950">
-           {/* Connection Status Indicator */}
-           <div className={`mb-3 px-3 py-1.5 rounded text-[10px] font-bold border flex items-center justify-center gap-2 bg-emerald-900/30 border-emerald-800 text-emerald-400`}>
-               <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-               {isOnline ? 'SERVER: ONLINE (CLOUD)' : 'MODE: LOKAL (ONLINE)'}
-           </div>
+           {isOnline ? (
+               <div className="mb-3 px-3 py-2 rounded border border-emerald-800 bg-emerald-900/20 text-emerald-400 animate-in slide-in-from-bottom-2">
+                   <div className="flex items-center gap-2 mb-1">
+                       <Cloud className="w-4 h-4" />
+                       <span className="text-[10px] font-bold">SATU DATA: AKTIF</span>
+                   </div>
+                   <p className="text-[9px] text-emerald-500 leading-tight">
+                       Server Terhubung. Data otomatis disinkronkan.
+                   </p>
+               </div>
+           ) : (
+               <div className="mb-3 px-3 py-2 rounded border border-red-800 bg-red-900/20 text-red-400">
+                   <div className="flex items-center gap-2 mb-1">
+                       <CloudOff className="w-4 h-4" />
+                       <span className="text-[10px] font-bold">MODE OFFLINE</span>
+                   </div>
+                   <p className="text-[9px] text-red-300 leading-tight">
+                       Belum Terhubung ke Server. Masukkan <b>API Key Firebase</b> di Pengaturan Vercel agar fitur Satu Data berfungsi.
+                   </p>
+               </div>
+           )}
+
+            {/* MANUAL SYNC BUTTON WITH SUCCESS STATE */}
+            {isOnline ? (
+                <button
+                    onClick={handleManualSync}
+                    disabled={syncState !== 'idle'}
+                    className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 mb-2 rounded text-xs font-bold transition-all shadow-sm ${
+                        syncState === 'success' 
+                         ? 'bg-green-600 text-white border border-green-500'
+                         : 'bg-blue-800 hover:bg-blue-700 text-white border border-blue-700'
+                    }`}
+                >
+                    {syncState === 'syncing' ? (
+                        <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Sinkronisasi...
+                        </>
+                    ) : syncState === 'success' ? (
+                        <>
+                            <CheckCircle2 className="w-3.5 h-3.5" /> SUKSES!
+                        </>
+                    ) : (
+                        <>
+                            <CloudUpload className="w-3.5 h-3.5" /> Push Data ke Cloud
+                        </>
+                    )}
+                </button>
+            ) : (
+                <div className="text-[9px] text-slate-500 text-center italic mb-2">
+                    Fitur Sinkronisasi Nonaktif
+                </div>
+            )}
 
            <button 
              onClick={onLogout}

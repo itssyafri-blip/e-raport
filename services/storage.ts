@@ -1,6 +1,7 @@
+
 import { User, Student, LearningObjective, Grade, UserRole, SUBJECTS, SchoolData, ReportGrade, ReportExtras, ReportCoverConfig, StudentProfile } from '../types';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot, Unsubscribe, writeBatch, getDoc } from 'firebase/firestore';
 
 // --- KONFIGURASI FIREBASE ---
 const getEnv = (key: string) => (import.meta as any).env?.[key];
@@ -19,11 +20,12 @@ let isOnline = false;
 
 try {
     const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI";
+    
     if (isConfigured) {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         isOnline = true;
-        console.log("System Status: ONLINE (Cloud Mode Active)");
+        console.log("System Status: ONLINE (Satu Data Cloud Active)");
     } else {
         console.warn("System Status: LOKAL (Offline Mode - Config Missing)");
     }
@@ -33,7 +35,7 @@ try {
     db = null;
 }
 
-// Initial Mock Data (Fallback)
+// Initial Mock Data (Fallback & Seeding)
 const INITIAL_USERS: User[] = [
   { id: '1', username: 'admin', password: '123', name: 'Administrator', role: UserRole.ADMIN },
 ];
@@ -46,18 +48,18 @@ const INITIAL_TPS: LearningObjective[] = [
 
 const INITIAL_SCHOOL_DATA: SchoolData = {
   name: 'SMA NEGERI 1 PULAU BANYAK BARAT',
-  npsn: '',
-  address: '',
-  street: '',
-  village: '',
-  subDistrict: '',
-  district: '',
-  province: '',
-  postalCode: '',
-  principalName: '',
-  principalNip: '',
-  website: '',
-  email: '',
+  npsn: '10101010',
+  address: 'Jl. Pendidikan No. 1',
+  street: 'Jl. Pendidikan No. 1',
+  village: 'Pulau Balai',
+  subDistrict: 'Pulau Banyak Barat',
+  district: 'Aceh Singkil',
+  province: 'Aceh',
+  postalCode: '24791',
+  principalName: 'Syafriadi, S.Pd,Gr',
+  principalNip: '198501012010011001',
+  website: 'sman1pbb.sch.id',
+  email: 'info@sman1pbb.sch.id',
   logoUrl: '' 
 };
 
@@ -91,7 +93,6 @@ export interface SessionData {
 
 // --- SUBSCRIPTION SYSTEM ---
 const listeners: { [key: string]: Function[] } = {};
-// Store Firebase Unsubscribes to prevent duplicates
 let cloudUnsubscribes: Unsubscribe[] = [];
 
 const emitChange = (key: string) => {
@@ -101,21 +102,69 @@ const emitChange = (key: string) => {
 };
 
 // --- CLOUD HELPER FUNCTIONS ---
-const syncCollectionFromCloud = async (collectionName: string, storageKey: string, initialData: any) => {
-    if (!db || !isOnline) return;
+
+const syncCollectionFromCloud = async (collectionName: string, storageKey: string, initialData: any[]) => {
+    if (!db || !isOnline) {
+        // Offline: Use LocalStorage or Init Data
+        if (!localStorage.getItem(storageKey)) {
+            localStorage.setItem(storageKey, JSON.stringify(initialData));
+        }
+        return;
+    }
+
     try {
         const snapshot = await getDocs(collection(db, collectionName));
         if (!snapshot.empty) {
+            // Cloud has data: Use it (Source of Truth)
             const data = snapshot.docs.map(doc => doc.data());
             localStorage.setItem(storageKey, JSON.stringify(data));
-            console.log(`Synced ${collectionName}: ${data.length} records.`);
         } else {
-             if (!localStorage.getItem(storageKey)) {
+             // Cloud is empty: AUTO-SEEDING (Upload Initial Data)
+             // This ensures Computer B gets data even if Computer A was the first to deploy
+             if (initialData && initialData.length > 0) {
+                 console.log(`Auto-seeding ${collectionName} to Cloud...`);
+                 const batch = writeBatch(db);
+                 initialData.forEach((item: any) => {
+                     const id = item.id || Date.now().toString();
+                     const docRef = doc(db, collectionName, id);
+                     batch.set(docRef, item);
+                 });
+                 await batch.commit();
                  localStorage.setItem(storageKey, JSON.stringify(initialData));
+             } else {
+                 // No initial data, just ensure empty array in local
+                 if (!localStorage.getItem(storageKey)) {
+                     localStorage.setItem(storageKey, JSON.stringify([]));
+                 }
              }
         }
     } catch (e) {
-        console.error(`Sync Fail (${collectionName}): Keeping local data.`);
+        console.error(`Sync Fail (${collectionName}):`, e);
+    }
+};
+
+const syncSettingFromCloud = async (docId: string, storageKey: string, initialData: any) => {
+    if (!db || !isOnline) {
+        if (!localStorage.getItem(storageKey)) {
+            localStorage.setItem(storageKey, JSON.stringify(initialData));
+        }
+        return;
+    }
+    
+    try {
+        const docRef = doc(db, 'settings', docId);
+        const snapshot = await getDoc(docRef);
+        
+        if (snapshot.exists()) {
+             localStorage.setItem(storageKey, JSON.stringify(snapshot.data()));
+        } else {
+             // Auto-seed setting
+             console.log(`Auto-seeding settings/${docId} to Cloud...`);
+             await setDoc(docRef, initialData);
+             localStorage.setItem(storageKey, JSON.stringify(initialData));
+        }
+    } catch(e) {
+        console.error(`Sync Setting Fail (${docId}):`, e);
     }
 };
 
@@ -138,7 +187,6 @@ const deleteFromCloud = async (collectionName: string, docId: string) => {
 };
 
 export const StorageService = {
-  // New: Subscribe to changes
   subscribe: (keys: string | string[], callback: () => void) => {
       const keysToWatch = Array.isArray(keys) ? keys : [keys];
       keysToWatch.forEach(k => {
@@ -153,18 +201,16 @@ export const StorageService = {
       };
   },
 
-  // New: Init Realtime Listeners
   initRealtime: () => {
       if (!isOnline || !db) return;
       
-      // Clear existing listeners to prevent duplicates
+      // Clear old listeners
       if (cloudUnsubscribes.length > 0) {
           cloudUnsubscribes.forEach(unsub => unsub());
           cloudUnsubscribes = [];
       }
 
-      console.log("Initializing One Data Realtime Listeners...");
-
+      // 1. Collections List
       const collections = [
           { name: 'users', key: STORAGE_KEYS.USERS },
           { name: 'students', key: STORAGE_KEYS.STUDENTS },
@@ -177,15 +223,14 @@ export const StorageService = {
       collections.forEach(col => {
           const unsub = onSnapshot(collection(db, col.name), (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data());
-              // Update Local Storage ("Cache")
+              // Prioritize Cloud Data: Overwrite Local
               localStorage.setItem(col.key, JSON.stringify(data));
-              // Notify UI
               emitChange(col.key);
           }, (error) => console.error(`Realtime Error (${col.name}):`, error));
           cloudUnsubscribes.push(unsub);
       });
 
-      // Settings Documents
+      // 2. Settings Documents Realtime (Data Sekolah & Cover)
       const unsubSchool = onSnapshot(doc(db, 'settings', 'school_data'), (snap) => {
           if(snap.exists()) {
                localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(snap.data()));
@@ -205,13 +250,14 @@ export const StorageService = {
 
   syncFromCloud: async () => {
       if (!isOnline) {
-          console.log("Mode Lokal: Menggunakan data browser.");
+          // Fallback init for offline mode
+          if (!localStorage.getItem(STORAGE_KEYS.USERS)) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+          if (!localStorage.getItem(STORAGE_KEYS.SCHOOL)) localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(INITIAL_SCHOOL_DATA));
           return Promise.resolve();
       }
       
-      console.log("Mode Online: Menyinkronkan data awal...");
       try {
-          // Initial Fetch (Blocking) to prevent empty flash
+          // Perform parallel sync
           await Promise.all([
               syncCollectionFromCloud('users', STORAGE_KEYS.USERS, INITIAL_USERS),
               syncCollectionFromCloud('students', STORAGE_KEYS.STUDENTS, INITIAL_STUDENTS),
@@ -219,19 +265,60 @@ export const StorageService = {
               syncCollectionFromCloud('report_grades', STORAGE_KEYS.REPORT_GRADES, []),
               syncCollectionFromCloud('report_extras', STORAGE_KEYS.REPORT_EXTRAS, []),
               syncCollectionFromCloud('student_profiles', STORAGE_KEYS.STUDENT_PROFILES, []),
-              (async () => {
-                  if(!db) return;
-                  try {
-                      const settingsSnap = await getDocs(collection(db, 'settings'));
-                      settingsSnap.forEach(doc => {
-                          if(doc.id === 'school_data') localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(doc.data()));
-                          if(doc.id === 'cover_config') localStorage.setItem(STORAGE_KEYS.COVER_CONFIG, JSON.stringify(doc.data()));
-                      });
-                  } catch(e) {}
-              })()
+              syncSettingFromCloud('school_data', STORAGE_KEYS.SCHOOL, INITIAL_SCHOOL_DATA),
+              syncSettingFromCloud('cover_config', STORAGE_KEYS.COVER_CONFIG, INITIAL_COVER_CONFIG)
           ]);
       } catch (e) {
           console.error("Sync Error - Continuing with local data", e);
+      }
+  },
+
+  // --- MANUAL FORCE SYNC TO CLOUD (COMPLETE ONE DATA) ---
+  forcePushToCloud: async () => {
+      if (!isOnline || !db) throw new Error("Offline Mode. Cannot sync.");
+
+      console.log("Start Force Push to Cloud...");
+
+      // Helper to upload array data
+      const uploadList = async (storageKey: string, collectionName: string) => {
+          const data = localStorage.getItem(storageKey);
+          if (!data) return;
+          const items = JSON.parse(data);
+          
+          if(items.length === 0) return;
+
+          // Simple loop for robustness (can be batched for performance, but loop ensures all IDs are hit)
+          const promises = items.map((item: any) => {
+              if (!item.id) return Promise.resolve();
+              return setDoc(doc(db, collectionName, item.id), item);
+          });
+          await Promise.all(promises);
+      };
+
+      // Helper to upload single doc data
+      const uploadDoc = async (storageKey: string, docId: string) => {
+          const data = localStorage.getItem(storageKey);
+          if (!data) return;
+          const item = JSON.parse(data);
+          await setDoc(doc(db, 'settings', docId), item);
+      };
+
+      try {
+          // Upload ALL Data Categories
+          await Promise.all([
+              uploadList(STORAGE_KEYS.USERS, 'users'),
+              uploadList(STORAGE_KEYS.STUDENTS, 'students'),
+              uploadList(STORAGE_KEYS.TPS, 'tps'),
+              uploadList(STORAGE_KEYS.REPORT_GRADES, 'report_grades'),
+              uploadList(STORAGE_KEYS.REPORT_EXTRAS, 'report_extras'),
+              uploadList(STORAGE_KEYS.STUDENT_PROFILES, 'student_profiles'),
+              // Upload Settings
+              uploadDoc(STORAGE_KEYS.SCHOOL, 'school_data'),
+              uploadDoc(STORAGE_KEYS.COVER_CONFIG, 'cover_config')
+          ]);
+      } catch (e) {
+          console.error("Manual Sync Failed:", e);
+          throw e;
       }
   },
 
@@ -260,11 +347,7 @@ export const StorageService = {
 
   getUsers: (): User[] => {
     const data = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!data) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-      return INITIAL_USERS;
-    }
-    return JSON.parse(data);
+    return data ? JSON.parse(data) : INITIAL_USERS;
   },
 
   updateUser: (updatedUser: User) => {
@@ -302,11 +385,7 @@ export const StorageService = {
 
   getStudents: (): Student[] => {
     const data = localStorage.getItem(STORAGE_KEYS.STUDENTS);
-    if (!data) {
-      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(INITIAL_STUDENTS));
-      return INITIAL_STUDENTS;
-    }
-    return JSON.parse(data);
+    return data ? JSON.parse(data) : INITIAL_STUDENTS;
   },
 
   saveStudent: (student: Student) => {
@@ -360,7 +439,6 @@ export const StorageService = {
   getTPs: (subject?: string, phase?: string, classTarget?: string): LearningObjective[] => {
     const data = localStorage.getItem(STORAGE_KEYS.TPS);
     let tps: LearningObjective[] = data ? JSON.parse(data) : INITIAL_TPS;
-    if (!data) localStorage.setItem(STORAGE_KEYS.TPS, JSON.stringify(INITIAL_TPS));
     
     if (subject) tps = tps.filter(tp => tp.subject === subject);
     if (phase) tps = tps.filter(tp => tp.phase === phase);
@@ -403,7 +481,6 @@ export const StorageService = {
     });
   },
 
-  // Helper for One Data: Get ALL grades to calculate statistics
   getAllReportGrades: (): ReportGrade[] => {
       const data = localStorage.getItem(STORAGE_KEYS.REPORT_GRADES);
       return data ? JSON.parse(data) : [];
@@ -462,7 +539,6 @@ export const StorageService = {
     };
   },
 
-  // Helper for One Data: Get ALL extras to show status lists
   getAllReportExtras: (): ReportExtras[] => {
       const data = localStorage.getItem(STORAGE_KEYS.REPORT_EXTRAS);
       return data ? JSON.parse(data) : [];
@@ -492,31 +568,23 @@ export const StorageService = {
 
   getSchoolData: (): SchoolData => {
     const data = localStorage.getItem(STORAGE_KEYS.SCHOOL);
-    if (!data) {
-      localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(INITIAL_SCHOOL_DATA));
-      return INITIAL_SCHOOL_DATA;
-    }
-    return JSON.parse(data);
+    return data ? JSON.parse(data) : INITIAL_SCHOOL_DATA;
   },
 
   saveSchoolData: (data: SchoolData) => {
     localStorage.setItem(STORAGE_KEYS.SCHOOL, JSON.stringify(data));
-    saveToCloud('settings', 'school_data', data);
+    saveToCloud('settings', 'school_data', data); // Explicit Cloud Save
     emitChange(STORAGE_KEYS.SCHOOL);
   },
 
   getCoverConfig: (): ReportCoverConfig => {
       const data = localStorage.getItem(STORAGE_KEYS.COVER_CONFIG);
-      if (!data) {
-          localStorage.setItem(STORAGE_KEYS.COVER_CONFIG, JSON.stringify(INITIAL_COVER_CONFIG));
-          return INITIAL_COVER_CONFIG;
-      }
-      return JSON.parse(data);
+      return data ? JSON.parse(data) : INITIAL_COVER_CONFIG;
   },
 
   saveCoverConfig: (config: ReportCoverConfig) => {
       localStorage.setItem(STORAGE_KEYS.COVER_CONFIG, JSON.stringify(config));
-      saveToCloud('settings', 'cover_config', config);
+      saveToCloud('settings', 'cover_config', config); // Explicit Cloud Save
       emitChange(STORAGE_KEYS.COVER_CONFIG);
   }
 };

@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { User, LearningObjective, UserRole, SUBJECTS, CLASSES } from '../types';
 import { GoogleGenAI } from "@google/genai";
-import { Plus, Trash2, Sparkles, Loader2, Book, Layers, GraduationCap } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Loader2, Book, Layers, GraduationCap, CloudUpload, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -16,6 +17,9 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
   const [phase, setPhase] = useState<'E' | 'F'>('E');
   const [targetClass, setTargetClass] = useState<string>(CLASSES[0]);
   const [loadingAi, setLoadingAi] = useState(false);
+  
+  // Cloud Sync State
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'uploading' | 'success'>('idle');
   
   const [selectedSubject, setSelectedSubject] = useState<string>(user.subject || SUBJECTS[0]);
 
@@ -52,6 +56,20 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
 
   const handleDelete = (id: string) => {
     StorageService.deleteTP(id);
+  };
+
+  const handleManualSync = async () => {
+      if (syncStatus === 'uploading') return;
+      setSyncStatus('uploading');
+      try {
+          await StorageService.forcePushToCloud();
+          setSyncStatus('success');
+          setTimeout(() => setSyncStatus('idle'), 3000);
+      } catch (e) {
+          console.error(e);
+          alert("Gagal sinkronisasi. Cek koneksi internet.");
+          setSyncStatus('idle');
+      }
   };
 
   const generateWithGemini = async () => {
@@ -113,6 +131,31 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
            <h3 className="text-lg font-semibold text-gray-900">Input Tujuan Pembelajaran (TP)</h3>
            <p className="text-sm text-gray-500">Kelola deskripsi kompetensi dasar Fase {phase}, Kelas {targetClass}, Semester {semester}</p>
         </div>
+        
+        {/* Cloud Sync Button directly on Page */}
+        <button 
+            onClick={handleManualSync}
+            disabled={syncStatus !== 'idle'}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-bold text-sm shadow-sm transition-all ${
+                syncStatus === 'success' 
+                ? 'bg-green-100 text-green-700 border border-green-300' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+            }`}
+        >
+            {syncStatus === 'uploading' ? (
+                <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Mengirim...
+                </>
+            ) : syncStatus === 'success' ? (
+                <>
+                    <CheckCircle2 className="w-4 h-4" /> TP Terkirim!
+                </>
+            ) : (
+                <>
+                    <CloudUpload className="w-4 h-4" /> Kirim TP ke Server Cloud
+                </>
+            )}
+        </button>
       </div>
       
       <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

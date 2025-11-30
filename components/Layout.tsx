@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { User, UserRole, SchoolData } from '../types';
 import { StorageService } from '../services/storage';
@@ -17,7 +18,8 @@ import {
   PenTool,
   Settings,
   Files,
-  Archive // New icon
+  Archive,
+  CheckSquare // New icon for Data Lengkap
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -95,6 +97,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
       <div className="mt-4 px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
         Laporan
       </div>
+      {/* New Menu Item */}
+      <NavItem view="student-extras" icon={CheckSquare} label="Data Lengkap Siswa" />
+      
       <NavItem view="report-settings" icon={Settings} label="Atur Data Rapor" />
       <NavItem view="printing" icon={Printer} label="Cetak Rapor (PDF)" />
       <NavItem view="printing-v2" icon={Files} label="Cetak Rapor Jalur Dua" />
@@ -144,6 +149,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
              <div className="mt-4 px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Laporan (Wali Kelas)
              </div>
+             {/* New Menu Item */}
+             <NavItem view="student-extras" icon={CheckSquare} label="Data Lengkap Siswa" />
+             
              <NavItem view="report-settings" icon={Settings} label="Atur Data Rapor" />
              <NavItem view="printing" icon={Printer} label="Cetak Rapor (PDF)" />
              <NavItem view="printing-v2" icon={Files} label="Cetak Rapor Jalur Dua" />

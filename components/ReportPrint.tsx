@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { CLASSES, SUBJECTS, User, ReportExtras, getPhaseFromClass, Student, SchoolData, ReportCoverConfig, StudentProfile, ReportGrade, LearningObjective } from '../types';
@@ -235,6 +234,8 @@ const ReportTemplate = ({
         if (status === 'TINGGAL') return `Tinggal di Kelas ${targetClass}`;
         if (status === 'NAIK_PERCOBAAN') return `Naik Percobaan ke Kelas ${targetClass}`;
         if (status === 'TINGGAL_PERCOBAAN') return `Tinggal Percobaan di Kelas ${targetClass}`;
+        if (status === 'NAIK_PERTIMBANGAN') return `Naik (Pertimbangan) ke Kelas ${targetClass}`;
+        if (status === 'TINGGAL_PERBAIKAN') return `Tinggal (Perbaikan) di Kelas ${targetClass}`;
         return '';
     };
 
@@ -424,7 +425,8 @@ const ReportTemplate = ({
                                         <p>NIP. {school.principalNip}</p>
                                     </td>
                                     <td className="w-1/3 align-top">
-                                        <p>{school.district || '................'}, {extras.date || new Date().toLocaleDateString('id-ID')}</p>
+                                        {/* Use issuePlace if available, otherwise fallback to school district */}
+                                        <p>{extras.issuePlace || school.district || '................'}, {extras.date || new Date().toLocaleDateString('id-ID')}</p>
                                         <p className="mb-20">Wali Kelas,</p>
                                         <p className="font-bold underline">{homeroomTeacher?.name || '...........................................'}</p>
                                         <p>NIP. {homeroomTeacher?.username || '.....................'}</p>
@@ -566,12 +568,17 @@ export const ReportPrint: React.FC<ReportPrintProps> = ({
         const student = StorageService.getStudents().find(s => s.id === studentId);
         if (!student) return null;
         
+        // LOGIC FIX: EXACT MATCHING FOR STORAGE KEY
         const parts = academicYear.replace("Tahun Pelajaran ", "").split(" ");
         const shortYear = parts[0]; 
 
         // Fix: getReportGrades with empty subject now returns ALL grades due to storage update
         const grades = StorageService.getReportGrades("", currentSemester, shortYear).filter(g => g.studentId === studentId);
+        
+        // INTEGRATION FIX: Ensure we use the correct shortYear to fetch the specific extras (attendance/promo) for this year
+        // This ensures the data entered in "Data Lengkap Siswa" (which now forces academicYear) is retrieved here
         const extras = StorageService.getReportExtras(studentId, shortYear);
+        
         const homeroomTeacher = StorageService.getHomeroomTeacher(student.class);
         const phase = selectedPhase;
 

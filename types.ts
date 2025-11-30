@@ -89,10 +89,12 @@ export interface ReportExtras {
   }[];
   teacherNote: string;
   date: string; // Date of report distribution
+  issuePlace?: string; // New: Tempat Penerbitan Rapor
   
   // New: Promotion Decision (Only for Genap)
   promotion?: {
-      status: 'NAIK' | 'TINGGAL' | 'NAIK_PERCOBAAN' | 'TINGGAL_PERCOBAAN' | '';
+      // Updated status types based on user request
+      status: 'NAIK' | 'TINGGAL' | 'NAIK_PERCOBAAN' | 'TINGGAL_PERCOBAAN' | 'NAIK_PERTIMBANGAN' | 'TINGGAL_PERBAIKAN' | '';
       targetClass: string; // e.g., "XI", "XII", "X"
   };
   academicYear?: string; // New: For Bank Rapor

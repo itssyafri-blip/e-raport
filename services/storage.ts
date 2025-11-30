@@ -3,8 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
 
 // --- KONFIGURASI FIREBASE ---
-// Menggunakan Environment Variables Vercel agar aman
-// Menggunakan casting 'any' untuk menghindari error TypeScript pada import.meta
 const getEnv = (key: string) => (import.meta as any).env?.[key];
 
 const firebaseConfig = {
@@ -19,10 +17,8 @@ const firebaseConfig = {
 let db: any = null;
 let isOnline = false;
 
-// FAIL-SAFE INITIALIZATION
 try {
     const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI";
-    
     if (isConfigured) {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
@@ -94,15 +90,12 @@ export interface SessionData {
 }
 
 // --- CLOUD HELPER FUNCTIONS ---
-// FORCE SYNC: Mengambil data dari cloud dan MENIMPA local storage
-// Ini memastikan "Satu Data" tercapai.
 const syncCollectionFromCloud = async (collectionName: string, storageKey: string, initialData: any) => {
     if (!db || !isOnline) return;
     try {
         const snapshot = await getDocs(collection(db, collectionName));
         if (!snapshot.empty) {
             const data = snapshot.docs.map(doc => doc.data());
-            // OVERWRITE LOCAL DATA WITH CLOUD DATA
             localStorage.setItem(storageKey, JSON.stringify(data));
             console.log(`Synced ${collectionName}: ${data.length} records.`);
         }
@@ -138,7 +131,6 @@ export const StorageService = {
       
       console.log("Mode Online: Menyinkronkan data dari server...");
       try {
-          // Sync semua koleksi penting
           await Promise.all([
               syncCollectionFromCloud('users', KEYS.USERS, INITIAL_USERS),
               syncCollectionFromCloud('students', KEYS.STUDENTS, INITIAL_STUDENTS),
@@ -348,6 +340,7 @@ export const StorageService = {
     localStorage.setItem(KEYS.REPORT_GRADES, JSON.stringify(allGrades));
   },
 
+  // FIX: Robust logic for retrieving extras
   getReportExtras: (studentId: string, academicYear?: string): ReportExtras => {
     const data = localStorage.getItem(KEYS.REPORT_EXTRAS);
     const allExtras: ReportExtras[] = data ? JSON.parse(data) : [];
@@ -356,18 +349,21 @@ export const StorageService = {
         const matchesStudent = e.studentId === studentId;
         let matchesYear = true;
         if (academicYear) {
-             if (e.academicYear) matchesYear = e.academicYear.includes(academicYear);
-             else matchesYear = false;
+             if (e.academicYear) matchesYear = e.academicYear.trim() === academicYear.trim();
+             else matchesYear = false; 
         }
         return matchesStudent && matchesYear;
     });
     
+    // Return found, OR return a NEW object initialized WITH the requested academicYear
     return found || {
       studentId,
+      academicYear: academicYear || '', 
       attendance: { sakit: 0, izin: 0, alpa: 0 },
-      extracurriculars: [{ name: 'Pramuka', description: 'Baik' }],
-      teacherNote: 'Tingkatkan terus semangat belajarmu.',
+      extracurriculars: [],
+      teacherNote: '',
       date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      issuePlace: '', // Initialize new field
       promotion: { status: '', targetClass: '' }
     };
   },
@@ -375,13 +371,21 @@ export const StorageService = {
   saveReportExtras: (extras: ReportExtras) => {
     const data = localStorage.getItem(KEYS.REPORT_EXTRAS);
     let allExtras: ReportExtras[] = data ? JSON.parse(data) : [];
+    
+    // Find existing entry to update
     const idx = allExtras.findIndex(e => 
         e.studentId === extras.studentId && 
         (e.academicYear === extras.academicYear || (!e.academicYear && !extras.academicYear))
     );
-    let docId = extras.studentId + '_' + (extras.academicYear || 'default').replace(/\//g, '-');
-    if (idx !== -1) allExtras[idx] = extras;
-    else allExtras.push(extras);
+    
+    // Unique ID for Cloud Doc
+    let docId = extras.studentId + '_' + (extras.academicYear || 'default').replace(/[\/\s]/g, '-');
+    
+    if (idx !== -1) {
+        allExtras[idx] = extras;
+    } else {
+        allExtras.push(extras);
+    }
     
     localStorage.setItem(KEYS.REPORT_EXTRAS, JSON.stringify(allExtras));
     saveToCloud('report_extras', docId, extras);

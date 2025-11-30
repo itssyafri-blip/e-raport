@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { StorageService } from './services/storage';
 import { User, UserRole, SchoolData } from './types';
@@ -13,6 +14,7 @@ import { ReportPrint } from './components/ReportPrint';
 import { SchoolDataSettings } from './components/SchoolData';
 import { ReportSettings } from './components/ReportSettings';
 import { ReportBank } from './components/ReportBank';
+import { StudentExtras } from './components/StudentExtras';
 import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -123,6 +125,10 @@ const App: React.FC = () => {
       case 'student-data':
         return <StudentData user={user} />;
       
+      case 'student-extras':
+        const canEditExtras = user.role === UserRole.ADMIN || (user.role === UserRole.GURU && !!user.homeroomClass);
+        return canEditExtras ? <StudentExtras user={user} currentSemester={currentSemester} academicYear={academicYear} /> : <div className="text-red-500">Akses Ditolak</div>;
+
       case 'report-settings':
         const canAccessSettings = user.role === UserRole.ADMIN || (user.role === UserRole.GURU && !!user.homeroomClass);
         return canAccessSettings ? <ReportSettings /> : <div className="text-red-500">Akses Ditolak</div>;

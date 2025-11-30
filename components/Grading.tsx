@@ -115,17 +115,85 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
     if(showDetailModal) setShowDetailModal(false);
   };
 
+  // --- PERBAIKAN DOWNLOAD TEMPLATE ---
+  const handleDownloadTemplate = () => {
+    // 1. Filter relevant TPs
+    const relevantTps = tps.filter(tp => 
+        tp.phase === selectedPhase && 
+        tp.semester === Number(currentSemester)
+    );
+
+    if (relevantTps.length === 0) {
+        alert("Info: Belum ada TP yang diinput untuk Fase/Semester ini. Template hanya akan berisi data siswa.");
+    }
+
+    // 2. CSV Header (Gunakan TITIK KOMA ';' agar rapi di Excel Indonesia)
+    const header = ["No", "Nama Siswa", "NISN", "Nilai Akhir (0-100)", "Kode TP Tuntas (Pisahkan Koma)", "Kode TP Perlu Bimbingan (Pisahkan Koma)"];
+    
+    // 3. Student Rows
+    const rows = students.map((s, idx) => {
+        return [
+            idx + 1,
+            `"${s.name}"`, // Quote name to handle special chars
+            `"${s.nisn}"`,
+            "", // Empty score placeholder
+            "", // Empty achieved placeholder
+            ""  // Empty improvement placeholder
+        ].join(";"); // Use Semicolon delimiter
+    });
+
+    // 4. Legend (TP Codes Reference)
+    const legendGap = ["", "", "", "", "", ""];
+    const legendTitle = ["", "DAFTAR KODE TP (REFERENSI - COPY KODE INI)", "", "", "", ""];
+    const legendHeader = ["KODE", "DESKRIPSI SINGKAT", "ID SISTEM (PASTE KE KOLOM TP)", "", "", ""];
+    
+    const legendRows = relevantTps.map((tp, idx) => {
+        // Clean description to avoid breaking CSV
+        const cleanDesc = tp.description.replace(/"/g, '""').substring(0, 80);
+        return ["", `TP-${idx + 1}`, `"${cleanDesc}..."`, `${tp.id}`, "", ""].join(";");
+    });
+
+    // 5. Combine with BOM (\uFEFF) for UTF-8 support
+    const csvContent = "\uFEFF" + [
+        header.join(";"),
+        ...rows,
+        "\n",
+        legendTitle.join(";"),
+        legendHeader.join(";"),
+        ...legendRows
+    ].join("\n");
+
+    // 6. Create and Download Blob
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Template_Nilai_${selectedClass}_${selectedSubject.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsImporting(true);
+      
+      // Simulating file reading logic
       setTimeout(() => {
         const updatedGrades = [...reportGrades];
+        
+        // Mocking successful import logic for demo
+        // In real implementation, parse CSV using ';' delimiter
         students.forEach(s => {
-             if(!updatedGrades.find(g => g.studentId === s.id)) {
-                 const achieved = tps.slice(0, Math.ceil(tps.length/2)).map(t => t.id);
-                 updatedGrades.push({
-                    id: '',
+             const existing = updatedGrades.find(g => g.studentId === s.id);
+             if(!existing || existing.finalScore === 0) {
+                 // Randomize TPs from available list for demo
+                 const relevantTps = tps.filter(tp => tp.phase === selectedPhase && tp.semester === Number(currentSemester));
+                 const achieved = relevantTps.slice(0, Math.ceil(relevantTps.length/2)).map(t => t.id);
+                 
+                 const newEntry: ReportGrade = {
+                    id: existing?.id || '',
                     studentId: s.id,
                     subject: selectedSubject,
                     finalScore: Math.floor(Math.random() * (95 - 75 + 1) + 75),
@@ -133,9 +201,16 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
                     improvementTpIds: [],
                     semester: currentSemester,
                     academicYear: shortYear
-                 });
+                 };
+                 
+                 if (existing) {
+                     Object.assign(existing, newEntry);
+                 } else {
+                     updatedGrades.push(newEntry);
+                 }
              }
         });
+        
         setReportGrades(updatedGrades);
         StorageService.saveReportGrades(updatedGrades);
         setIsImporting(false);
@@ -157,13 +232,13 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
     </div>
   );
 
-  // Filter TPs by Phase and Semester ONLY (ignore specific class target to ensure broader visibility)
+  // Filter TPs by Phase and Semester ONLY
   const relevantTps = tps.filter(tp => 
       tp.phase === selectedPhase && 
       tp.semester === Number(currentSemester)
   );
 
-  if (tps.length === 0) {
+  if (tps.length === 0 && mode === 'input') {
       return (
           <div className="space-y-4">
               <div className="bg-white p-4 rounded border border-gray-200 inline-block">
@@ -171,7 +246,7 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
               </div>
               <div className="text-center py-10 bg-yellow-50 rounded-lg border border-yellow-200 text-yellow-800">
                   <p className="font-semibold">TP Belum Tersedia untuk {selectedSubject}</p>
-                  <p className="text-sm mt-1">Silakan input Tujuan Pembelajaran terlebih dahulu di menu "Tujuan Pembelajaran" (Pastikan Fase/Semester sesuai).</p>
+                  <p className="text-sm mt-1">Silakan input Tujuan Pembelajaran terlebih dahulu di menu "Tujuan Pembelajaran".</p>
               </div>
           </div>
       );
@@ -183,7 +258,8 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
              <div className="bg-blue-50 border border-blue-100 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-blue-900 mb-2">Import Nilai dari Excel</h3>
                 <p className="text-sm text-blue-700 mb-4">
-                    Gunakan template terbaru. Kolom meliputi: No, Nama, NISN, Nilai Akhir, Kode TP Tuntas (pisahkan koma), Kode TP Perlu Bimbingan.
+                    Gunakan template terbaru. Format file CSV (Titik Koma).<br/>
+                    Kolom: No; Nama; NISN; Nilai Akhir; Kode TP Tuntas; Kode TP Perlu Bimbingan.
                 </p>
                 <div className="flex items-end gap-4 flex-wrap">
                     <div>
@@ -206,7 +282,10 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
                             {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
-                    <button className="bg-white hover:bg-gray-50 text-blue-700 px-4 py-2 rounded-md border border-blue-200 flex items-center gap-2 text-sm font-medium transition-colors">
+                    <button 
+                        onClick={handleDownloadTemplate}
+                        className="bg-white hover:bg-gray-50 text-blue-700 px-4 py-2 rounded-md border border-blue-200 flex items-center gap-2 text-sm font-medium transition-colors"
+                    >
                         <Download className="w-4 h-4" /> Download Template
                     </button>
                 </div>
@@ -216,13 +295,14 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
                  <div className="p-4 bg-white rounded-full shadow-sm mb-4">
                      <FileSpreadsheet className="w-12 h-12 text-green-600" />
                  </div>
-                 <h4 className="text-lg font-medium text-gray-900 mb-1">Upload File Nilai</h4>
+                 <h4 className="text-lg font-medium text-gray-900 mb-1">Upload File CSV/Excel</h4>
                  <label className="cursor-pointer mt-4">
                     <span className={`bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md shadow-lg flex items-center gap-2 font-medium transition-all ${isImporting ? 'opacity-70 cursor-not-allowed' : ''}`}>
-                        {isImporting ? 'Sedang Memproses...' : 'Pilih File Excel'}
+                        {isImporting ? 'Sedang Memproses...' : 'Pilih File CSV'}
                     </span>
                     <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} disabled={isImporting} />
                  </label>
+                 <p className="text-xs text-gray-400 mt-2">Pastikan format sesuai template.</p>
             </div>
         </div>
       );
@@ -235,9 +315,8 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
       if (!student) return null;
 
       const entry = getGradeEntry(student.id);
-      const currentPhase = getPhaseFromClass(student.class); // e.g. E or F
+      const currentPhase = getPhaseFromClass(student.class);
       
-      // Strict Filter: Phase + Semester only. Ignore classTarget to allow shared TPs in Phase.
       const studentTps = tps.filter(t => 
           t.phase === currentPhase && 
           t.semester === Number(currentSemester)

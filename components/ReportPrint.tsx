@@ -346,7 +346,7 @@ const ReportTemplate = ({
                         ) : (
                             <tr>
                                 <td colSpan={4} className="border border-black px-4 py-8 text-center italic text-gray-500">
-                                    Belum ada mata pelajaran yang dinilai lengkap (Nilai > 0 DAN TP terisi).
+                                    Belum ada mata pelajaran yang dinilai lengkap (Nilai &gt; 0 DAN TP terisi).
                                 </td>
                             </tr>
                         )}

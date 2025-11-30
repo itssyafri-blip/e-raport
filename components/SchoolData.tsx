@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { SchoolData } from '../types';
-import { Save, Building2, Upload, Image as ImageIcon, CloudUpload } from 'lucide-react';
+import { Save, Building2, Upload, Image as ImageIcon, UploadCloud } from 'lucide-react';
 
 interface SchoolDataSettingsProps {
     onUpdate: () => void;
@@ -68,7 +68,7 @@ export const SchoolDataSettings: React.FC<SchoolDataSettingsProps> = ({ onUpdate
             onClick={handleSave} 
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded shadow-sm text-sm font-semibold flex items-center gap-2 transition-colors"
         >
-            <CloudUpload className="w-4 h-4" /> Simpan & Sinkron ke Cloud
+            <UploadCloud className="w-4 h-4" /> Simpan & Sinkron ke Cloud
         </button>
       </div>
 

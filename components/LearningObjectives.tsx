@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { User, LearningObjective, UserRole, SUBJECTS, CLASSES } from '../types';
 import { GoogleGenAI } from "@google/genai";
-import { Plus, Trash2, Sparkles, Loader2, Book, Layers, GraduationCap, CloudUpload, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Loader2, Book, Layers, GraduationCap, UploadCloud, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -152,7 +152,7 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
                 </>
             ) : (
                 <>
-                    <CloudUpload className="w-4 h-4" /> Kirim TP ke Server Cloud
+                    <UploadCloud className="w-4 h-4" /> Kirim TP ke Server Cloud
                 </>
             )}
         </button>

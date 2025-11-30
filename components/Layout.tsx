@@ -21,7 +21,7 @@ import {
   CheckSquare,
   CloudOff,
   Cloud,
-  CloudUpload,
+  UploadCloud,
   Loader2,
   CheckCircle2,
   AlertTriangle
@@ -278,7 +278,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
                         </>
                     ) : (
                         <>
-                            <CloudUpload className="w-3.5 h-3.5" /> Push Data ke Cloud
+                            <UploadCloud className="w-3.5 h-3.5" /> Push Data ke Cloud
                         </>
                     )}
                 </button>

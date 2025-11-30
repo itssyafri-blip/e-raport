@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { User, UserRole, SUBJECTS } from '../types';
 import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Activity, CloudUpload, Loader2, Server, CheckCircle2, AlertTriangle, Wifi, RefreshCw, Clock } from 'lucide-react';
+import { Activity, UploadCloud, Loader2, Server, CheckCircle2, AlertTriangle, Wifi, RefreshCw, Clock } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -107,7 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                           {syncStatus === 'success' ? (
                               <CheckCircle2 className="w-10 h-10 text-white animate-bounce" />
                           ) : (
-                              <CloudUpload className="w-10 h-10 text-white" />
+                              <UploadCloud className="w-10 h-10 text-white" />
                           )}
                       </div>
                       <div>
@@ -168,7 +168,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                       </>
                   ) : (
                       <>
-                         <CloudUpload className="w-6 h-6 text-blue-700 group-hover:-translate-y-1 transition-transform" />
+                         <UploadCloud className="w-6 h-6 text-blue-700 group-hover:-translate-y-1 transition-transform" />
                          <span>KIRIM DATA SEKARANG</span>
                       </>
                   )}

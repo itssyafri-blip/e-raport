@@ -8,6 +8,11 @@ interface LoginProps {
   onLogin: (user: User, academicYear: string) => void;
 }
 
+interface SemesterOption {
+  value: string;
+  label: string;
+}
+
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +28,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   }, []);
 
   // Generate Semester Options for 30 Years starting 2025
-  const semesterOptions = [];
+  const semesterOptions: SemesterOption[] = [];
   const startYear = 2025;
   for (let i = 0; i < 30; i++) {
       const currentYear = startYear + i;

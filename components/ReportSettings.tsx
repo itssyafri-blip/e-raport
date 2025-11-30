@@ -5,8 +5,7 @@ import { SchoolData, ReportCoverConfig, Student, StudentProfile, CLASSES } from 
 import { Save, BookOpen, Building2, User, Printer, Upload, Image as ImageIcon, FileDown, Loader2 } from 'lucide-react';
 import { CoverTemplate, SchoolIdentityTemplate, StudentIdentityTemplate } from './ReportPrint';
 
-// Declare html2pdf globally
-declare var html2pdf: any;
+// REMOVED: declare var html2pdf: any; (Defined globally in vite-env.d.ts)
 
 export const ReportSettings: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'cover' | 'profile' | 'student'>('cover');

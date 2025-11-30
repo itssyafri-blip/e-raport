@@ -1,10 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { CLASSES, SUBJECTS, User, ReportExtras, getPhaseFromClass, Student, SchoolData, ReportCoverConfig, StudentProfile, ReportGrade, LearningObjective } from '../types';
 import { Search, FileDown, Edit, X, Loader2, AlertTriangle, Printer, Layers, Eye } from 'lucide-react';
 
-// Declare html2pdf globally
-declare var html2pdf: any;
+// REMOVED: declare var html2pdf: any; (Defined globally in vite-env.d.ts)
 
 interface ReportPrintProps {
   mode?: 'selection' | 'preview';

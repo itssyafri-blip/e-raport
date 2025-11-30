@@ -54,14 +54,19 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
   const generateWithGemini = async () => {
     if (!selectedSubject) return;
     
-    if (!process.env.API_KEY) {
-        alert("API Key tidak ditemukan. Fitur AI tidak dapat digunakan pada demo ini tanpa konfigurasi environment.");
+    // PERBAIKAN: Akses environment variable dengan casting 'any' untuk keamanan tipe di Vercel/Vite
+    // Menghindari error TS2345: Argument of type 'string | undefined' is not assignable to 'string'
+    const env = (import.meta as any).env;
+    const apiKey = (env?.VITE_API_KEY || '') as string;
+
+    if (!apiKey) {
+        alert("API Key tidak ditemukan. Fitur AI tidak dapat digunakan pada demo ini tanpa konfigurasi environment variable VITE_API_KEY.");
         return;
     }
 
     setLoadingAi(true);
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         const prompt = `Buatkan 3 Tujuan Pembelajaran (TP) singkat dan padat untuk mata pelajaran ${selectedSubject} Fase ${phase} (Kelas ${targetClass}) semester ${semester}. Format output JSON array of strings only.`;
         
         const response = await ai.models.generateContent({
@@ -70,7 +75,8 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
             config: { responseMimeType: "application/json" }
         });
 
-        const generatedTps: string[] = JSON.parse(response.text);
+        const textResponse = response.text || '[]';
+        const generatedTps: string[] = JSON.parse(textResponse);
         
         generatedTps.forEach(desc => {
              const objective: LearningObjective = {
@@ -88,7 +94,7 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
         
     } catch (e) {
         console.error("Gemini Error", e);
-        alert("Gagal mengenerate TP. Silakan input manual.");
+        alert("Gagal mengenerate TP. Silakan input manual atau cek kuota API.");
     } finally {
         setLoadingAi(false);
     }

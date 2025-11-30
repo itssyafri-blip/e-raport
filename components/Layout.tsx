@@ -232,13 +232,17 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
         {/* Sidebar Footer - STATUS CONNECTION */}
         <div className="p-4 border-t border-slate-800 bg-slate-950">
            {isOnline ? (
-               <div className="mb-3 px-3 py-2 rounded border border-emerald-800 bg-emerald-900/20 text-emerald-400 animate-in slide-in-from-bottom-2">
+               <div className="mb-3 px-3 py-2 rounded border border-emerald-800 bg-emerald-900/20 text-emerald-400 animate-in slide-in-from-bottom-2 relative overflow-hidden">
                    <div className="flex items-center gap-2 mb-1">
-                       <Cloud className="w-4 h-4" />
-                       <span className="text-[10px] font-bold">SATU DATA: AKTIF</span>
+                       {/* Pulsing Dot Effect */}
+                       <div className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                        </div>
+                       <span className="text-[10px] font-bold">LIVE SYNC: AKTIF</span>
                    </div>
                    <p className="text-[9px] text-emerald-500 leading-tight">
-                       Server Terhubung. Data otomatis disinkronkan.
+                       Terhubung ke Vercel Cloud. Data otomatis terbaca di perangkat lain.
                    </p>
                </div>
            ) : (
@@ -248,7 +252,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, schoolData, currentView, o
                        <span className="text-[10px] font-bold">MODE OFFLINE</span>
                    </div>
                    <p className="text-[9px] text-red-300 leading-tight">
-                       Belum Terhubung ke Server. Masukkan <b>API Key Firebase</b> di Pengaturan Vercel agar fitur Satu Data berfungsi.
+                       API Key belum terpasang di Vercel. Data tidak akan terbaca di komputer lain.
                    </p>
                </div>
            )}

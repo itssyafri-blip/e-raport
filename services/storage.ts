@@ -1,33 +1,52 @@
 
 import { User, Student, LearningObjective, Grade, UserRole, SUBJECTS, SchoolData, ReportGrade, ReportExtras, ReportCoverConfig, StudentProfile } from '../types';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot, Unsubscribe, writeBatch, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot, Unsubscribe, writeBatch, getDoc, enableIndexedDbPersistence } from 'firebase/firestore';
 
 // --- KONFIGURASI FIREBASE ---
 const getEnv = (key: string) => (import.meta as any).env?.[key];
 
 const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY") || "API_KEY_ANDA_DISINI",
-  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN") || "PROJECT_ID.firebaseapp.com",
-  projectId: getEnv("VITE_FIREBASE_PROJECT_ID") || "PROJECT_ID",
-  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET") || "PROJECT_ID.appspot.com",
-  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID") || "SENDER_ID",
-  appId: getEnv("VITE_FIREBASE_APP_ID") || "APP_ID"
+  apiKey: "AIzaSyC50GrviY5GFBf9nvWBfQVfxIbdcx18ijE",
+  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
+  projectId: getEnv("VITE_FIREBASE_PROJECT_ID"),
+  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET"),
+  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+  appId: getEnv("VITE_FIREBASE_APP_ID")
 };
 
 let db: any = null;
 let isOnline = false;
+let isConfigured = false;
 
 try {
-    const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "API_KEY_ANDA_DISINI";
+    // Cek apakah API Key valid (bukan undefined, bukan string kosong, dan bukan placeholder default)
+    const apiKey = firebaseConfig.apiKey;
+    isConfigured = !!apiKey && apiKey !== "API_KEY_ANDA_DISINI" && !apiKey.includes("INSERT_YOUR_KEY");
     
     if (isConfigured) {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        isOnline = true;
-        console.log("System Status: ONLINE (Satu Data Cloud Active)");
+        // Only initialize if we have critical config or assume partial config might work (it usually fails without projectId for Firestore)
+        // Check if projectId is present if we are relying on Env vars for it
+        if (!firebaseConfig.projectId && !getEnv("VITE_FIREBASE_PROJECT_ID")) {
+             console.warn("Firebase Project ID missing. Running in Offline Mode despite API Key presence.");
+             // Don't throw error immediately, just log and set online to false gracefully
+             isOnline = false;
+        } else {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            
+            // Aktifkan Offline Persistence (Cache) agar data tetap tampil saat loading
+            try {
+                // enableIndexedDbPersistence(db).catch((err) => {
+                //     console.warn("Persistence Error:", err.code);
+                // });
+            } catch(e) { console.log("Persistence setup skipped"); }
+
+            isOnline = true;
+            console.log("System Status: ONLINE (Connected to Firebase Cloud)");
+        }
     } else {
-        console.warn("System Status: LOKAL (Offline Mode - Config Missing)");
+        console.warn("System Status: OFFLINE (Missing Vercel Environment Variables)");
     }
 } catch (e) {
     console.error("Firebase Init Failed:", e);
@@ -201,9 +220,13 @@ export const StorageService = {
       };
   },
 
+  isConfigured: () => isConfigured,
+
   initRealtime: () => {
       if (!isOnline || !db) return;
       
+      console.log("Initializing Realtime Listeners for Vercel/Cloud...");
+
       // Clear old listeners
       if (cloudUnsubscribes.length > 0) {
           cloudUnsubscribes.forEach(unsub => unsub());
@@ -225,6 +248,7 @@ export const StorageService = {
               const data = snapshot.docs.map(doc => doc.data());
               // Prioritize Cloud Data: Overwrite Local
               localStorage.setItem(col.key, JSON.stringify(data));
+              console.log(`Realtime update received for: ${col.name}`);
               emitChange(col.key);
           }, (error) => console.error(`Realtime Error (${col.name}):`, error));
           cloudUnsubscribes.push(unsub);
@@ -257,6 +281,7 @@ export const StorageService = {
       }
       
       try {
+          console.log("Starting Full Cloud Sync...");
           // Perform parallel sync
           await Promise.all([
               syncCollectionFromCloud('users', STORAGE_KEYS.USERS, INITIAL_USERS),
@@ -268,6 +293,7 @@ export const StorageService = {
               syncSettingFromCloud('school_data', STORAGE_KEYS.SCHOOL, INITIAL_SCHOOL_DATA),
               syncSettingFromCloud('cover_config', STORAGE_KEYS.COVER_CONFIG, INITIAL_COVER_CONFIG)
           ]);
+          console.log("Full Cloud Sync Complete.");
       } catch (e) {
           console.error("Sync Error - Continuing with local data", e);
       }
@@ -287,12 +313,21 @@ export const StorageService = {
           
           if(items.length === 0) return;
 
-          // Simple loop for robustness (can be batched for performance, but loop ensures all IDs are hit)
-          const promises = items.map((item: any) => {
-              if (!item.id) return Promise.resolve();
-              return setDoc(doc(db, collectionName, item.id), item);
-          });
-          await Promise.all(promises);
+          const batch = writeBatch(db);
+          let count = 0;
+          
+          for (const item of items) {
+              if (!item.id) continue;
+              const docRef = doc(db, collectionName, item.id);
+              batch.set(docRef, item);
+              count++;
+              // Firestore batch limit is 500
+              if (count >= 400) {
+                  await batch.commit();
+                  count = 0;
+              }
+          }
+          if (count > 0) await batch.commit();
       };
 
       // Helper to upload single doc data
@@ -588,3 +623,4 @@ export const StorageService = {
       emitChange(STORAGE_KEYS.COVER_CONFIG);
   }
 };
+    

@@ -87,7 +87,7 @@ const App: React.FC = () => {
               <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
               <div className="text-center">
                   <p className="font-bold text-lg">Menyiapkan Aplikasi...</p>
-                  <p className="text-sm text-slate-400">Menyinkronkan data dengan server.</p>
+                  <p className="text-sm text-slate-400">Menyinkronkan data...</p>
               </div>
           </div>
       );

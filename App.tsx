@@ -1,7 +1,5 @@
-
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from './services/storage';
+import { StorageService, STORAGE_KEYS } from './services/storage';
 import { User, UserRole, SchoolData } from './types';
 import { Login } from './components/Login';
 import { Layout } from './components/Layout';
@@ -35,11 +33,15 @@ const App: React.FC = () => {
   // Initial Sync and Load
   useEffect(() => {
       const initApp = async () => {
-          // 1. Try to sync with cloud
+          // 1. Try to sync with cloud (Blocking for first load)
           await StorageService.syncFromCloud();
+          
+          // 2. Start Realtime Listeners (Non-blocking)
+          StorageService.initRealtime();
+          
           setIsSyncing(false);
 
-          // 2. Check Session
+          // 3. Check Session
           if (!isPrintMode) {
             const session = StorageService.getSession();
             if (session) {
@@ -48,12 +50,19 @@ const App: React.FC = () => {
             }
           }
 
-          // 3. Load School Data
+          // 4. Load School Data
           setSchoolData(StorageService.getSchoolData());
           setIsLoading(false);
       };
 
       initApp();
+
+      // Subscribe to School Data changes globally
+      const unsubscribe = StorageService.subscribe(STORAGE_KEYS.SCHOOL, () => {
+          setSchoolData(StorageService.getSchoolData());
+      });
+      return unsubscribe;
+
   }, [isPrintMode]);
 
   const handleLogin = (loggedInUser: User, year: string) => {

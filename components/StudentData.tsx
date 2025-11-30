@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { Student, CLASSES, User, UserRole, getPhaseFromClass } from '../types';
 import { Plus, Search, Trash, AlertTriangle, Edit, Save, X, Layers } from 'lucide-react';
 
@@ -24,6 +23,12 @@ export const StudentData: React.FC<StudentDataProps> = ({ user }) => {
     if (user.role !== UserRole.ADMIN && user.homeroomClass) {
         setFilterClass(user.homeroomClass);
     }
+    
+    // Subscribe to changes
+    const unsubscribe = StorageService.subscribe(STORAGE_KEYS.STUDENTS, () => {
+        setStudents(StorageService.getStudents());
+    });
+    return unsubscribe;
   }, [user]);
 
   // When class changes in form, auto-update phase
@@ -39,7 +44,6 @@ export const StudentData: React.FC<StudentDataProps> = ({ user }) => {
   const handleSave = () => {
     if (formData.name && formData.nisn && formData.class) {
       // If editing, preserve ID, otherwise StorageService will generate one
-      // Default phase if missing (backward compatibility)
       const studentToSave = { 
           ...formData, 
           phase: formData.phase || getPhaseFromClass(formData.class),
@@ -47,8 +51,7 @@ export const StudentData: React.FC<StudentDataProps> = ({ user }) => {
       };
       
       StorageService.saveStudent(studentToSave as Student);
-      setStudents(StorageService.getStudents());
-      
+      // Local state update handled by subscription or force refresh
       // Reset Form
       setIsAdding(false);
       setEditingId(null);
@@ -68,7 +71,6 @@ export const StudentData: React.FC<StudentDataProps> = ({ user }) => {
   const handleDelete = (id: string) => {
       if(window.confirm("Apakah Anda yakin ingin menghapus data siswa ini? Data nilai yang terkait mungkin akan hilang.")) {
           StorageService.deleteStudent(id);
-          setStudents(StorageService.getStudents());
       }
   };
 

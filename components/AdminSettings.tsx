@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { User, UserRole, SUBJECTS, CLASSES } from '../types';
 import { Save, UserCog, RefreshCw, UserPlus, X, Trash2, Shield, User as UserIcon, GraduationCap } from 'lucide-react';
 
@@ -13,6 +12,8 @@ export const AdminSettings: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+    const unsubscribe = StorageService.subscribe(STORAGE_KEYS.USERS, loadUsers);
+    return unsubscribe;
   }, []);
 
   const loadUsers = () => {
@@ -36,7 +37,6 @@ export const AdminSettings: React.FC = () => {
   const handleDelete = (id: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus pengguna ini?')) {
       StorageService.deleteUser(id);
-      loadUsers();
       setMessage('Pengguna berhasil dihapus.');
     }
   };
@@ -51,7 +51,6 @@ export const AdminSettings: React.FC = () => {
           setMessage('Data pengguna berhasil diperbarui.');
       }
       
-      loadUsers();
       setEditingId(null);
       setIsAdding(false);
       

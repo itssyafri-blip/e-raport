@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { User, LearningObjective, UserRole, SUBJECTS, CLASSES } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import { Plus, Trash2, Sparkles, Loader2, Book, Layers, GraduationCap } from 'lucide-react';
@@ -24,11 +23,17 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
       setSemester(currentSemester);
   }, [currentSemester]);
 
-  useEffect(() => {
+  const loadTPs = () => {
     if (selectedSubject) {
       const allTps = StorageService.getTPs(selectedSubject);
       setTps(allTps);
     }
+  };
+
+  useEffect(() => {
+    loadTPs();
+    const unsubscribe = StorageService.subscribe(STORAGE_KEYS.TPS, loadTPs);
+    return unsubscribe;
   }, [selectedSubject, phase, targetClass, semester]);
 
   const handleAdd = () => {
@@ -42,20 +47,17 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
       classTarget: targetClass
     };
     StorageService.addTP(objective);
-    setTps(StorageService.getTPs(selectedSubject));
     setNewTp('');
   };
 
   const handleDelete = (id: string) => {
     StorageService.deleteTP(id);
-    setTps(StorageService.getTPs(selectedSubject));
   };
 
   const generateWithGemini = async () => {
     if (!selectedSubject) return;
     
     // PERBAIKAN: Akses environment variable dengan casting 'any' untuk keamanan tipe di Vercel/Vite
-    // Menghindari error TS2345: Argument of type 'string | undefined' is not assignable to 'string'
     const env = (import.meta as any).env;
     const apiKey = (env?.VITE_API_KEY || '') as string;
 
@@ -89,8 +91,6 @@ export const LearningObjectives: React.FC<Props> = ({ user, currentSemester }) =
             };
             StorageService.addTP(objective);
         });
-        
-        setTps(StorageService.getTPs(selectedSubject));
         
     } catch (e) {
         console.error("Gemini Error", e);

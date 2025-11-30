@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { SchoolData, ReportCoverConfig, Student, StudentProfile, CLASSES } from '../types';
 import { Save, BookOpen, Building2, User, Printer, Upload, Image as ImageIcon, FileDown, Loader2 } from 'lucide-react';
 import { CoverTemplate, SchoolIdentityTemplate, StudentIdentityTemplate } from './ReportPrint';
@@ -22,11 +21,35 @@ export const ReportSettings: React.FC = () => {
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadType, setDownloadType] = useState<'cover'|'school'|'student'|null>(null);
 
+    // Initial Load & Subscription
     useEffect(() => {
-        setSchoolData(StorageService.getSchoolData());
-        setCoverConfig(StorageService.getCoverConfig());
-        setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
-    }, [selectedClass]);
+        const loadAll = () => {
+            setSchoolData(StorageService.getSchoolData());
+            setCoverConfig(StorageService.getCoverConfig());
+            setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
+        };
+        
+        loadAll();
+
+        const unsubSchool = StorageService.subscribe(STORAGE_KEYS.SCHOOL, () => setSchoolData(StorageService.getSchoolData()));
+        const unsubCover = StorageService.subscribe(STORAGE_KEYS.COVER_CONFIG, () => setCoverConfig(StorageService.getCoverConfig()));
+        const unsubStudents = StorageService.subscribe(STORAGE_KEYS.STUDENTS, () => setStudents(StorageService.getStudents().filter(s => s.class === selectedClass)));
+
+        // Subscribe to student profile changes to support One Data
+        const unsubProfiles = StorageService.subscribe(STORAGE_KEYS.STUDENT_PROFILES, () => {
+             if (selectedStudentId) {
+                  const updatedProfile = StorageService.getStudentProfile(selectedStudentId);
+                  setStudentProfile(updatedProfile);
+             }
+        });
+
+        return () => {
+            unsubSchool();
+            unsubCover();
+            unsubStudents();
+            unsubProfiles();
+        };
+    }, [selectedClass, selectedStudentId]);
 
     useEffect(() => {
         if (selectedStudentId) {
@@ -48,7 +71,7 @@ export const ReportSettings: React.FC = () => {
             StorageService.saveStudentProfile(studentProfile);
         }
 
-        setMessage('Pengaturan berhasil disimpan.');
+        setMessage('Pengaturan berhasil disimpan dan disinkronkan.');
         setTimeout(() => setMessage(''), 3000);
     };
 
@@ -100,9 +123,7 @@ export const ReportSettings: React.FC = () => {
                 // Legal Size Config for HTML2PDF
                 format = 'legal';
                 // HTML2PDF doesn't support custom dimensions via string '215mm 330mm' easily in all versions,
-                // but we can try to rely on the CSS of the container. 
-                // However, for consistency, we often stick to standard formats.
-                // Let's try to pass the dimensions if the library supports unit array
+                // but we can try to pass 'legal' or adjust.
                 dimensions = [215, 330]; 
             }
 
@@ -172,7 +193,10 @@ export const ReportSettings: React.FC = () => {
             </div>
 
             {message && (
-                 <div className="bg-emerald-50 text-emerald-700 p-4 rounded border-l-4 border-emerald-500 text-sm">{message}</div>
+                 <div className="bg-emerald-50 text-emerald-700 p-4 rounded border-l-4 border-emerald-500 text-sm flex items-center gap-2">
+                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                     {message}
+                 </div>
             )}
 
             {/* TABS */}

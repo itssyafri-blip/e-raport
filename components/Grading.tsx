@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { User, Student, LearningObjective, ReportGrade, CLASSES, UserRole, SUBJECTS, getPhaseFromClass } from '../types';
 import { Upload, FileSpreadsheet, Save, Download, AlertCircle, CheckSquare, Square, Search, X, User as UserIcon, Layers } from 'lucide-react';
 
@@ -39,16 +38,27 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
       setSelectedPhase(getPhaseFromClass(selectedClass));
   }, [selectedClass]);
 
-  useEffect(() => {
+  // Load Grades & TPs
+  const loadData = () => {
     if (selectedSubject) {
-      // Fetch ALL TPs for the subject
       setTps(StorageService.getTPs(selectedSubject));
       setReportGrades(StorageService.getReportGrades(selectedSubject, currentSemester, shortYear));
     }
-  }, [selectedSubject, currentSemester, shortYear]);
+  };
 
   useEffect(() => {
-    setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
+    loadData();
+    const unsubTps = StorageService.subscribe(STORAGE_KEYS.TPS, loadData);
+    const unsubGrades = StorageService.subscribe(STORAGE_KEYS.REPORT_GRADES, loadData);
+    return () => { unsubTps(); unsubGrades(); };
+  }, [selectedSubject, currentSemester, shortYear]);
+
+  // Load Students
+  useEffect(() => {
+    const loadStudents = () => setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
+    loadStudents();
+    const unsubStudents = StorageService.subscribe(STORAGE_KEYS.STUDENTS, loadStudents);
+    return unsubStudents;
   }, [selectedClass]);
 
   const getGradeEntry = (studentId: string): ReportGrade => {
@@ -115,9 +125,8 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
     if(showDetailModal) setShowDetailModal(false);
   };
 
-  // --- PERBAIKAN DOWNLOAD TEMPLATE ---
+  // --- DOWNLOAD TEMPLATE ---
   const handleDownloadTemplate = () => {
-    // 1. Filter relevant TPs
     const relevantTps = tps.filter(tp => 
         tp.phase === selectedPhase && 
         tp.semester === Number(currentSemester)
@@ -127,33 +136,27 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
         alert("Info: Belum ada TP yang diinput untuk Fase/Semester ini. Template hanya akan berisi data siswa.");
     }
 
-    // 2. CSV Header (Gunakan TITIK KOMA ';' agar rapi di Excel Indonesia)
     const header = ["No", "Nama Siswa", "NISN", "Nilai Akhir (0-100)", "Kode TP Tuntas (Pisahkan Koma)", "Kode TP Perlu Bimbingan (Pisahkan Koma)"];
     
-    // 3. Student Rows
     const rows = students.map((s, idx) => {
         return [
             idx + 1,
-            `"${s.name}"`, // Quote name to handle special chars
+            `"${s.name}"`, 
             `"${s.nisn}"`,
-            "", // Empty score placeholder
-            "", // Empty achieved placeholder
-            ""  // Empty improvement placeholder
-        ].join(";"); // Use Semicolon delimiter
+            "", 
+            "", 
+            ""  
+        ].join(";"); 
     });
 
-    // 4. Legend (TP Codes Reference)
-    const legendGap = ["", "", "", "", "", ""];
     const legendTitle = ["", "DAFTAR KODE TP (REFERENSI - COPY KODE INI)", "", "", "", ""];
     const legendHeader = ["KODE", "DESKRIPSI SINGKAT", "ID SISTEM (PASTE KE KOLOM TP)", "", "", ""];
     
     const legendRows = relevantTps.map((tp, idx) => {
-        // Clean description to avoid breaking CSV
         const cleanDesc = tp.description.replace(/"/g, '""').substring(0, 80);
         return ["", `TP-${idx + 1}`, `"${cleanDesc}..."`, `${tp.id}`, "", ""].join(";");
     });
 
-    // 5. Combine with BOM (\uFEFF) for UTF-8 support
     const csvContent = "\uFEFF" + [
         header.join(";"),
         ...rows,
@@ -163,7 +166,6 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
         ...legendRows
     ].join("\n");
 
-    // 6. Create and Download Blob
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -179,16 +181,13 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
     if (file) {
       setIsImporting(true);
       
-      // Simulating file reading logic
       setTimeout(() => {
         const updatedGrades = [...reportGrades];
         
-        // Mocking successful import logic for demo
-        // In real implementation, parse CSV using ';' delimiter
+        // Mock import
         students.forEach(s => {
              const existing = updatedGrades.find(g => g.studentId === s.id);
              if(!existing || existing.finalScore === 0) {
-                 // Randomize TPs from available list for demo
                  const relevantTps = tps.filter(tp => tp.phase === selectedPhase && tp.semester === Number(currentSemester));
                  const achieved = relevantTps.slice(0, Math.ceil(relevantTps.length/2)).map(t => t.id);
                  
@@ -232,7 +231,6 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
     </div>
   );
 
-  // Filter TPs by Phase and Semester ONLY
   const relevantTps = tps.filter(tp => 
       tp.phase === selectedPhase && 
       tp.semester === Number(currentSemester)
@@ -498,7 +496,6 @@ export const Grading: React.FC<Props> = ({ user, mode, currentSemester, academic
           <tbody className="bg-white divide-y divide-gray-200">
             {students.map((student, idx) => {
                 const entry = getGradeEntry(student.id);
-                // Also use the filtered TPs here for the table checklist
                 const studentTps = tps.filter(t => 
                     t.phase === selectedPhase && 
                     t.semester === Number(currentSemester)

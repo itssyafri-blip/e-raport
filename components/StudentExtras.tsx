@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { Student, CLASSES, ReportExtras, User } from '../types';
-import { Save, Plus, Trash, User as UserIcon, Calendar, CheckSquare, Search, AlertTriangle, X, Layers } from 'lucide-react';
+import { Save, Plus, Trash, User as UserIcon, Calendar, CheckSquare, Search, AlertTriangle, X, Layers, CheckCircle2, Circle } from 'lucide-react';
 
 interface Props {
     user: User;
@@ -12,6 +12,7 @@ interface Props {
 export const StudentExtras: React.FC<Props> = ({ user, currentSemester, academicYear }) => {
     const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
     const [students, setStudents] = useState<Student[]>([]);
+    const [allExtras, setAllExtras] = useState<ReportExtras[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     
     // Modal State
@@ -29,8 +30,21 @@ export const StudentExtras: React.FC<Props> = ({ user, currentSemester, academic
     const shortYear = getShortYear();
     const isSemesterGenap = currentSemester === '2';
 
+    // Subscribe to students and extras for ONE DATA visualization
     useEffect(() => {
-        setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
+        const loadData = () => {
+             setStudents(StorageService.getStudents().filter(s => s.class === selectedClass));
+             setAllExtras(StorageService.getAllReportExtras());
+        };
+        loadData();
+        
+        const unsubStudents = StorageService.subscribe(STORAGE_KEYS.STUDENTS, loadData);
+        const unsubExtras = StorageService.subscribe(STORAGE_KEYS.REPORT_EXTRAS, loadData);
+        
+        return () => {
+            unsubStudents();
+            unsubExtras();
+        };
     }, [selectedClass]);
 
     const handleEdit = (student: Student) => {
@@ -80,6 +94,15 @@ export const StudentExtras: React.FC<Props> = ({ user, currentSemester, academic
         updated[index][field] = value;
         setFormData({ ...formData, extracurriculars: updated });
     };
+    
+    // Check if a student has data for this year
+    const checkStatus = (studentId: string) => {
+        const data = allExtras.find(e => 
+            e.studentId === studentId && 
+            e.academicYear === shortYear
+        );
+        return !!data;
+    };
 
     const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -91,7 +114,7 @@ export const StudentExtras: React.FC<Props> = ({ user, currentSemester, academic
                         <CheckSquare className="w-5 h-5 text-blue-600" />
                         Data Lengkap Siswa
                     </h3>
-                    <p className="text-sm text-gray-500">Input Absensi, Ekstrakurikuler, Catatan Wali Kelas, dan Kenaikan Kelas.</p>
+                    <p className="text-sm text-gray-500">Input Absensi, Ekstrakurikuler, Catatan Wali Kelas (Realtime Status).</p>
                 </div>
                 
                 <div className="flex gap-4 items-center">
@@ -127,26 +150,41 @@ export const StudentExtras: React.FC<Props> = ({ user, currentSemester, academic
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase w-32">NISN</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Nama Siswa</th>
+                            <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase w-40">Status Data</th>
                             <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase w-40">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredStudents.length > 0 ? filteredStudents.map(s => (
-                            <tr key={s.id} className="hover:bg-blue-50/30 transition-colors">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{s.nisn}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{s.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right">
-                                    <button 
-                                        onClick={() => handleEdit(s)}
-                                        className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
-                                    >
-                                        <CheckSquare className="w-4 h-4" /> Kelola Data
-                                    </button>
-                                </td>
-                            </tr>
-                        )) : (
+                        {filteredStudents.length > 0 ? filteredStudents.map(s => {
+                            const hasData = checkStatus(s.id);
+                            return (
+                                <tr key={s.id} className="hover:bg-blue-50/30 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{s.nisn}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{s.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                        {hasData ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                                                <CheckCircle2 className="w-3.5 h-3.5" /> Terisi
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                                <Circle className="w-3.5 h-3.5" /> Belum
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <button 
+                                            onClick={() => handleEdit(s)}
+                                            className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
+                                        >
+                                            <CheckSquare className="w-4 h-4" /> Kelola Data
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        }) : (
                             <tr>
-                                <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
+                                <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
                                     Tidak ada siswa ditemukan di kelas ini.
                                 </td>
                             </tr>

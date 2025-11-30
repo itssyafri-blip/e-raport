@@ -1,23 +1,44 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { User, UserRole, SUBJECTS } from '../types';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Activity } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const students = StorageService.getStudents();
-  const users = StorageService.getUsers();
+  const [students, setStudents] = useState(StorageService.getStudents());
+  const [users, setUsers] = useState(StorageService.getUsers());
+  const [allGrades, setAllGrades] = useState(StorageService.getAllReportGrades());
+  
+  // Realtime subscription
+  useEffect(() => {
+    const handleUpdate = () => {
+        setStudents(StorageService.getStudents());
+        setUsers(StorageService.getUsers());
+        setAllGrades(StorageService.getAllReportGrades());
+    };
+
+    const unsubStudents = StorageService.subscribe(STORAGE_KEYS.STUDENTS, handleUpdate);
+    const unsubUsers = StorageService.subscribe(STORAGE_KEYS.USERS, handleUpdate);
+    const unsubGrades = StorageService.subscribe(STORAGE_KEYS.REPORT_GRADES, handleUpdate);
+    
+    return () => {
+      unsubStudents();
+      unsubUsers();
+      unsubGrades();
+    };
+  }, []);
   
   const stats = useMemo(() => {
     return [
       { label: 'Total Siswa', value: students.length, color: 'bg-blue-500' },
       { label: 'Total Guru', value: users.filter(u => u.role === UserRole.GURU).length, color: 'bg-green-500' },
-      { label: 'Mata Pelajaran', value: SUBJECTS.length, color: 'bg-purple-500' },
+      { label: 'Total Nilai Masuk', value: allGrades.length, color: 'bg-orange-500', icon: Activity },
     ];
-  }, [students, users]);
+  }, [students, users, allGrades]);
 
   const chartData = [
     { name: 'X-A', students: students.filter(s => s.class === 'X-A').length },
@@ -35,7 +56,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <p className="text-sm font-medium text-gray-500">{stat.label}</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{stat.value}</p>
             </div>
-            <div className={`h-3 w-3 rounded-full ${stat.color}`}></div>
+            <div className={`h-10 w-10 rounded-full ${stat.color} flex items-center justify-center text-white`}>
+                {stat.icon ? <stat.icon className="w-5 h-5" /> : <div className="w-3 h-3 bg-white rounded-full"></div>}
+            </div>
           </div>
         ))}
       </div>

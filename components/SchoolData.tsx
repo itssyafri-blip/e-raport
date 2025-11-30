@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { StorageService } from '../services/storage';
+import { StorageService, STORAGE_KEYS } from '../services/storage';
 import { SchoolData } from '../types';
 import { Save, Building2, Upload, Image as ImageIcon } from 'lucide-react';
 
@@ -22,14 +22,20 @@ export const SchoolDataSettings: React.FC<SchoolDataSettingsProps> = ({ onUpdate
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const data = StorageService.getSchoolData();
-    setFormData(data);
+    const loadData = () => {
+        const data = StorageService.getSchoolData();
+        setFormData(data);
+    };
+    loadData();
+    // Subscribe to changes from other users
+    const unsubscribe = StorageService.subscribe(STORAGE_KEYS.SCHOOL, loadData);
+    return unsubscribe;
   }, []);
 
   const handleSave = () => {
     StorageService.saveSchoolData(formData);
-    onUpdate(); // Trigger update in parent
-    setMessage('Data sekolah berhasil disimpan.');
+    onUpdate(); // Trigger update in parent layout (Sidebar)
+    setMessage('Data sekolah berhasil disimpan dan disinkronkan.');
     setTimeout(() => setMessage(''), 3000);
   };
 
@@ -56,7 +62,7 @@ export const SchoolDataSettings: React.FC<SchoolDataSettingsProps> = ({ onUpdate
             <Building2 className="w-6 h-6 text-blue-600" />
             Identitas Sekolah
             </h3>
-            <p className="text-sm text-gray-500 mt-1">Pengaturan profil sekolah, logo, dan data kepala sekolah.</p>
+            <p className="text-sm text-gray-500 mt-1">Pengaturan profil sekolah, logo, dan data kepala sekolah (Realtime Sync).</p>
         </div>
         <button 
             onClick={handleSave} 
